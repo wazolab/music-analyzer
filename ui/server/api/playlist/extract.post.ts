@@ -24,18 +24,50 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const { stdout } = await execFileAsync('yt-dlp', [
+    const isYouTube = url.includes('youtube.com') || url.includes('youtu.be')
+
+    const args = [
       '--dump-json',
       '--no-warnings',
       '--skip-download',
       '--no-playlist-reverse',
-      url,
-    ], { maxBuffer: 50 * 1024 * 1024, timeout: 120000 })
+    ]
+
+    // YouTube requires browser cookies to avoid bot detection
+    if (isYouTube) {
+      args.push('--cookies-from-browser', 'firefox')
+    }
+
+    args.push(url)
+
+    // Use spawn to capture both stdout and stderr separately
+    const { spawn } = await import('child_process')
+
+    const result = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+      const proc = spawn('yt-dlp', args, { maxBuffer: 50 * 1024 * 1024 })
+      let stdout = ''
+      let stderr = ''
+
+      proc.stdout.on('data', (data) => { stdout += data })
+      proc.stderr.on('data', (data) => { stderr += data })
+
+      proc.on('close', (code) => {
+        // Accept exit code 0 or 1 (some videos may fail but others succeed)
+        resolve({ stdout, stderr })
+      })
+
+      proc.on('error', reject)
+
+      setTimeout(() => {
+        proc.kill()
+        reject(new Error('Timeout'))
+      }, 120000)
+    })
 
     const tracks: TrackInfo[] = []
 
-    for (const line of stdout.trim().split('\n')) {
-      if (!line) continue
+    for (const line of result.stdout.trim().split('\n')) {
+      if (!line || line.startsWith('ERROR')) continue
 
       try {
         const data = JSON.parse(line)
@@ -46,6 +78,10 @@ export default defineEventHandler(async (event) => {
       } catch {
         // Skip malformed lines
       }
+    }
+
+    if (tracks.length === 0 && result.stderr) {
+      throw new Error(result.stderr.split('\n')[0] || 'No tracks found')
     }
 
     return { tracks }

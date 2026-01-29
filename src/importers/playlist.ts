@@ -11,7 +11,7 @@ export interface TrackInfo {
 }
 
 /**
- * Extract track list from a SoundCloud playlist using yt-dlp
+ * Extract track list from a SoundCloud or YouTube playlist using yt-dlp
  */
 export async function extractPlaylist(playlistUrl: string): Promise<TrackInfo[]> {
   // Check if yt-dlp is available
@@ -21,14 +21,27 @@ export async function extractPlaylist(playlistUrl: string): Promise<TrackInfo[]>
     throw new Error('yt-dlp is not installed. Install with: pip install yt-dlp');
   }
 
-  // Extract full playlist metadata (not --flat-playlist to get titles)
-  const { stdout } = await execFileAsync('yt-dlp', [
+  const isYouTube = playlistUrl.includes('youtube.com') || playlistUrl.includes('youtu.be');
+
+  const args = [
     '--dump-json',
     '--no-warnings',
     '--skip-download',
     '--no-playlist-reverse',
-    playlistUrl,
-  ], { maxBuffer: 50 * 1024 * 1024, timeout: 120000 }); // 50MB buffer, 2min timeout
+  ];
+
+  // YouTube requires browser cookies to avoid bot detection
+  if (isYouTube) {
+    args.push('--cookies-from-browser', 'firefox');
+  }
+
+  args.push(playlistUrl);
+
+  // Extract full playlist metadata
+  const { stdout } = await execFileAsync('yt-dlp', args, {
+    maxBuffer: 50 * 1024 * 1024,
+    timeout: 120000,
+  }); // 50MB buffer, 2min timeout
 
   const tracks: TrackInfo[] = [];
 
