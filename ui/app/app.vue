@@ -1,7 +1,9 @@
 <template>
   <div class="app">
     <header>
-      <h1>Music Pipeline</h1>
+      <NuxtLink to="/" class="logo">
+        <h1>Music Pipeline</h1>
+      </NuxtLink>
       <div class="slskd-status" :class="slskdStatus">
         <span class="status-dot"></span>
         <span>slskd: {{ slskdStatus }}</span>
@@ -12,50 +14,16 @@
     </header>
 
     <main>
-      <section class="soundcloud-section">
-        <h2>Import Playlist</h2>
-        <div class="input-group">
-          <input
-            v-model="soundcloudUrl"
-            type="text"
-            placeholder="Paste SoundCloud or YouTube playlist URL..."
-            @keyup.enter="extractPlaylist"
-          />
-          <button @click="extractPlaylist" :disabled="extracting || !soundcloudUrl">
-            {{ extracting ? 'Extracting...' : 'Extract' }}
-          </button>
-        </div>
-
-        <div v-if="error" class="error">{{ error }}</div>
-
-        <div v-if="tracks.length > 0" class="tracks">
-          <div class="tracks-header">
-            <h3>{{ tracks.length }} tracks found</h3>
-            <button @click="copyTrackList" class="copy-btn">Copy List</button>
-          </div>
-          <ul>
-            <li v-for="(track, index) in tracks" :key="index">
-              <span class="track-number">{{ index + 1 }}.</span>
-              <span class="track-artist">{{ track.artist }}</span>
-              <span class="track-separator">-</span>
-              <span class="track-title">{{ track.title }}</span>
-            </li>
-          </ul>
-        </div>
-      </section>
+      <NuxtPage />
     </main>
   </div>
 </template>
 
 <script setup>
-const soundcloudUrl = ref('')
-const tracks = ref([])
-const extracting = ref(false)
-const error = ref('')
 const slskdStatus = ref('checking')
 const loading = ref(false)
+const error = ref('')
 
-// Check slskd status on mount
 onMounted(async () => {
   await checkSlskdStatus()
 })
@@ -92,33 +60,6 @@ async function stopSlskd() {
   }
   loading.value = false
 }
-
-async function extractPlaylist() {
-  if (!soundcloudUrl.value) return
-
-  extracting.value = true
-  error.value = ''
-  tracks.value = []
-
-  try {
-    const res = await $fetch('/api/playlist/extract', {
-      method: 'POST',
-      body: { url: soundcloudUrl.value }
-    })
-    tracks.value = res.tracks
-  } catch (e) {
-    error.value = e.data?.message || 'Failed to extract playlist'
-  }
-
-  extracting.value = false
-}
-
-function copyTrackList() {
-  const text = tracks.value
-    .map((t, i) => `${i + 1}. ${t.artist} - ${t.title}`)
-    .join('\n')
-  navigator.clipboard.writeText(text)
-}
 </script>
 
 <style>
@@ -136,7 +77,7 @@ body {
 }
 
 .app {
-  max-width: 900px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 20px;
 }
@@ -148,6 +89,10 @@ header {
   padding: 20px 0;
   border-bottom: 1px solid #333;
   margin-bottom: 30px;
+}
+
+.logo {
+  text-decoration: none;
 }
 
 h1 {
@@ -194,33 +139,6 @@ h1 {
   background: #1a2744;
 }
 
-h2 {
-  font-size: 1.2rem;
-  margin-bottom: 20px;
-  color: #aaa;
-}
-
-.input-group {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 20px;
-}
-
-input {
-  flex: 1;
-  padding: 12px 16px;
-  border: 1px solid #333;
-  border-radius: 8px;
-  background: #16213e;
-  color: #eee;
-  font-size: 1rem;
-}
-
-input:focus {
-  outline: none;
-  border-color: #00dc82;
-}
-
 button {
   padding: 12px 24px;
   border: none;
@@ -242,70 +160,26 @@ button:disabled {
   cursor: not-allowed;
 }
 
-.error {
+input {
   padding: 12px 16px;
-  background: #ff475722;
-  border: 1px solid #ff4757;
+  border: 1px solid #333;
   border-radius: 8px;
-  color: #ff4757;
-  margin-bottom: 20px;
-}
-
-.tracks {
   background: #16213e;
-  border-radius: 12px;
-  padding: 20px;
-}
-
-.tracks-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-}
-
-.tracks-header h3 {
+  color: #eee;
   font-size: 1rem;
+}
+
+input:focus {
+  outline: none;
+  border-color: #00dc82;
+}
+
+a {
   color: #00dc82;
+  text-decoration: none;
 }
 
-.copy-btn {
-  padding: 8px 16px;
-  font-size: 0.85rem;
-  background: #333;
-  color: #eee;
-}
-
-ul {
-  list-style: none;
-}
-
-li {
-  padding: 10px 0;
-  border-bottom: 1px solid #2a2a4a;
-  display: flex;
-  gap: 8px;
-}
-
-li:last-child {
-  border-bottom: none;
-}
-
-.track-number {
-  color: #666;
-  min-width: 30px;
-}
-
-.track-artist {
-  color: #00dc82;
-  font-weight: 500;
-}
-
-.track-separator {
-  color: #666;
-}
-
-.track-title {
-  color: #eee;
+a:hover {
+  text-decoration: underline;
 }
 </style>
