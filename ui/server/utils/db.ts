@@ -53,6 +53,13 @@ try {
   // Column already exists
 }
 
+// Migration: add tags column if missing
+try {
+  db.exec('ALTER TABLE tracks ADD COLUMN tags TEXT')
+} catch (e) {
+  // Column already exists
+}
+
 // Playlist operations
 export function getAllPlaylists(): Playlist[] {
   return db.prepare('SELECT * FROM playlists ORDER BY updated_at DESC').all() as Playlist[]
@@ -199,6 +206,12 @@ export function clearPreparationList(): void {
 export function isInPreparationList(trackId: number): boolean {
   const result = db.prepare('SELECT 1 FROM preparation_list WHERE track_id = ?').get(trackId)
   return !!result
+}
+
+export function updateTrackTags(id: number, tags: string[]): boolean {
+  const tagsJson = JSON.stringify(tags)
+  const result = db.prepare('UPDATE tracks SET tags = ? WHERE id = ?').run(tagsJson, id)
+  return result.changes > 0
 }
 
 export default db

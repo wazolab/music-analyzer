@@ -8,6 +8,7 @@ export interface Track {
   duration: number | null
   status: TrackStatus
   source_url: string | null
+  tags: string[] | null
 }
 
 export interface PrepTrack {

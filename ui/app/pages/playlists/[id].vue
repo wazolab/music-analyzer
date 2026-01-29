@@ -12,7 +12,7 @@
             <span class="separator">|</span>
             <a :href="playlist.url" target="_blank" class="source-link">View source</a>
             <span class="separator">|</span>
-            <span>Updated {{ formatDate(playlist.updated_at) }}</span>
+            <ClientOnly><span>Updated {{ formatDate(playlist.updated_at) }}</span></ClientOnly>
           </div>
         </div>
         <button @click="syncPlaylist" :disabled="syncing" class="sync-btn">

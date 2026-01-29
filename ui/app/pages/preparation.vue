@@ -50,7 +50,6 @@
           <span class="track-separator">-</span>
           <span class="track-title">{{ track.title }}</span>
           <span v-if="track.duration" class="track-duration">{{ formatDuration(track.duration) }}</span>
-          <span class="track-playlist">{{ track.playlist_name }}</span>
         </div>
       </div>
     </div>
@@ -276,14 +275,6 @@ async function clearList() {
   font-size: 0.85rem;
   min-width: 45px;
   text-align: right;
-}
-
-.track-playlist {
-  color: #555;
-  font-size: 0.8rem;
-  background: #1a1a2e;
-  padding: 4px 8px;
-  border-radius: 4px;
 }
 
 .audio-player {

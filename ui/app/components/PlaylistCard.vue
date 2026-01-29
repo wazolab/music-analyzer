@@ -4,7 +4,7 @@
       <h3>{{ playlist.name }}</h3>
       <div class="card-meta">
         <span class="track-count">{{ playlist.track_count }} tracks</span>
-        <span class="updated">Updated {{ formatDate(playlist.updated_at) }}</span>
+        <ClientOnly><span class="updated">Updated {{ formatDate(playlist.updated_at) }}</span></ClientOnly>
       </div>
     </NuxtLink>
     <button @click.prevent="$emit('delete', playlist.id)" class="delete-btn" title="Delete playlist">
