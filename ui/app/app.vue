@@ -10,6 +10,10 @@
           <span class="nav-icon">📋</span>
           <span>Playlists</span>
         </NuxtLink>
+        <NuxtLink to="/preparation" class="nav-item" :class="{ active: route.path === '/preparation' }">
+          <span class="nav-icon">🎧</span>
+          <span>DJ Prep</span>
+        </NuxtLink>
       </nav>
 
       <div class="sidebar-footer">
@@ -34,6 +38,10 @@
 </template>
 
 <script setup>
+useHead({
+  titleTemplate: (title) => title ? `Music Pipeline - ${title}` : 'Music Pipeline'
+})
+
 const route = useRoute()
 const slskdStatus = ref('checking')
 const loading = ref(false)

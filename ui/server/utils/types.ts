@@ -7,6 +7,18 @@ export interface Track {
   title: string
   duration: number | null
   status: TrackStatus
+  source_url: string | null
+}
+
+export interface PrepTrack {
+  id: number
+  track_id: number
+  artist: string
+  title: string
+  duration: number | null
+  source_url: string | null
+  playlist_name: string
+  added_at: string
 }
 
 export interface Playlist {
@@ -26,6 +38,7 @@ export interface TrackInput {
   artist: string
   title: string
   duration?: number
+  source_url?: string
 }
 
 export interface CreatePlaylistInput {

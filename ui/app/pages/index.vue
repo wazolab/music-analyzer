@@ -45,6 +45,8 @@
 </template>
 
 <script setup>
+useHead({ title: 'Playlists' })
+
 const playlistUrl = ref('')
 const playlistName = ref('')
 const extracting = ref(false)

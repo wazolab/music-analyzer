@@ -42,8 +42,29 @@
           :key="track.id"
           :track="track"
           :index="getTrackIndex(track)"
+          :in-prep="prepTrackIds.has(track.id)"
+          :is-playing="currentTrack?.id === track.id"
           @update-status="handleStatusUpdate"
+          @toggle-prep="handleTogglePrep"
+          @toggle-play="handleTogglePlay"
         />
+      </div>
+
+      <!-- Audio Player -->
+      <div v-if="currentTrack" class="audio-player">
+        <div class="player-info">
+          <span class="player-artist">{{ currentTrack.artist }}</span>
+          <span class="player-separator">-</span>
+          <span class="player-title">{{ currentTrack.title }}</span>
+        </div>
+        <button class="player-close" @click="stopPlayback">✕</button>
+        <iframe
+          v-if="embedUrl"
+          :src="embedUrl"
+          class="player-embed"
+          allow="autoplay"
+          frameborder="0"
+        ></iframe>
       </div>
     </template>
   </div>
@@ -56,6 +77,8 @@ const playlistId = computed(() => route.params.id)
 const activeFilter = ref('all')
 const syncing = ref(false)
 const error = ref('')
+const currentTrack = ref(null)
+const prepTrackIds = ref(new Set())
 
 const tabs = [
   { value: 'all', label: 'All' },
@@ -68,6 +91,43 @@ const { data: playlist, pending, error: fetchError, refresh } = await useFetch(
   () => `/api/playlists/${playlistId.value}`,
   { default: () => null }
 )
+
+useHead({
+  title: computed(() => playlist.value?.name || 'Playlist')
+})
+
+// Load preparation list
+const { data: prepList } = await useFetch('/api/preparation', {
+  default: () => []
+})
+
+watch(prepList, (list) => {
+  prepTrackIds.value = new Set(list.map(t => t.track_id))
+}, { immediate: true })
+
+// Generate embed URL for playback
+const embedUrl = computed(() => {
+  if (!currentTrack.value?.source_url) return null
+  const url = currentTrack.value.source_url
+
+  if (url.includes('soundcloud.com')) {
+    return `https://w.soundcloud.com/player/?url=${encodeURIComponent(url)}&auto_play=true&hide_related=true&show_comments=false&show_user=false&show_reposts=false&visual=false`
+  }
+
+  if (url.includes('youtube.com') || url.includes('youtu.be')) {
+    const videoId = extractYouTubeId(url)
+    if (videoId) {
+      return `https://www.youtube.com/embed/${videoId}?autoplay=1`
+    }
+  }
+
+  return null
+})
+
+function extractYouTubeId(url) {
+  const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&?/]+)/)
+  return match ? match[1] : null
+}
 
 const filteredTracks = computed(() => {
   if (!playlist.value?.tracks) return []
@@ -126,6 +186,42 @@ async function handleStatusUpdate({ trackId, status }) {
   } catch (e) {
     error.value = e.data?.message || 'Failed to update track status'
   }
+}
+
+async function handleTogglePrep(trackId) {
+  const inPrep = prepTrackIds.value.has(trackId)
+
+  try {
+    if (inPrep) {
+      await $fetch('/api/preparation/remove', {
+        method: 'POST',
+        body: { trackId }
+      })
+      prepTrackIds.value.delete(trackId)
+    } else {
+      await $fetch('/api/preparation/add', {
+        method: 'POST',
+        body: { trackId }
+      })
+      prepTrackIds.value.add(trackId)
+    }
+    // Trigger reactivity
+    prepTrackIds.value = new Set(prepTrackIds.value)
+  } catch (e) {
+    error.value = e.data?.message || 'Failed to update preparation list'
+  }
+}
+
+function handleTogglePlay(track) {
+  if (currentTrack.value?.id === track.id) {
+    currentTrack.value = null
+  } else {
+    currentTrack.value = track
+  }
+}
+
+function stopPlayback() {
+  currentTrack.value = null
 }
 </script>
 
@@ -237,5 +333,58 @@ h2 {
   color: #666;
   text-align: center;
   padding: 40px;
+}
+
+.audio-player {
+  position: fixed;
+  bottom: 0;
+  left: 240px;
+  right: 0;
+  background: #16213e;
+  border-top: 1px solid #333;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  z-index: 100;
+}
+
+.player-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 200px;
+}
+
+.player-artist {
+  color: #00dc82;
+  font-weight: 500;
+}
+
+.player-separator {
+  color: #666;
+}
+
+.player-title {
+  color: #eee;
+}
+
+.player-close {
+  padding: 6px 10px;
+  background: #333;
+  color: #888;
+  font-size: 0.85rem;
+}
+
+.player-close:hover {
+  background: #ff4757;
+  color: #fff;
+}
+
+.player-embed {
+  flex: 1;
+  height: 80px;
+  border-radius: 8px;
+  max-width: 500px;
 }
 </style>

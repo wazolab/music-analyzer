@@ -7,6 +7,7 @@ interface TrackInfo {
   artist: string
   title: string
   duration?: number
+  source_url?: string
 }
 
 export default defineEventHandler(async (event) => {
@@ -24,21 +25,13 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const isYouTube = url.includes('youtube.com') || url.includes('youtu.be')
-
     const args = [
       '--dump-json',
       '--no-warnings',
       '--skip-download',
       '--no-playlist-reverse',
+      url
     ]
-
-    // YouTube requires browser cookies to avoid bot detection
-    if (isYouTube) {
-      args.push('--cookies-from-browser', 'firefox')
-    }
-
-    args.push(url)
 
     // Use spawn to capture both stdout and stderr separately
     const { spawn } = await import('child_process')
@@ -122,5 +115,6 @@ function parseTrackInfo(data: any): TrackInfo | null {
     artist: artist || 'Unknown Artist',
     title,
     duration: data.duration,
+    source_url: data.webpage_url || data.url,
   }
 }
