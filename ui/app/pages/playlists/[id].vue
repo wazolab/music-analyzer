@@ -22,29 +22,14 @@
 
       <div v-if="error" class="error">{{ error }}</div>
 
-      <div class="filter-tabs">
-        <button
-          v-for="tab in tabs"
-          :key="tab.value"
-          :class="['tab', { active: activeFilter === tab.value }]"
-          @click="activeFilter = tab.value"
-        >
-          {{ tab.label }} ({{ getCountForStatus(tab.value) }})
-        </button>
-      </div>
-
       <div class="tracks-list">
-        <div v-if="filteredTracks.length === 0" class="empty">
-          No tracks match this filter.
-        </div>
         <TrackRow
-          v-for="(track, index) in filteredTracks"
+          v-for="(track, index) in playlist.tracks"
           :key="track.id"
           :track="track"
-          :index="getTrackIndex(track)"
+          :index="index + 1"
           :in-prep="prepTrackIds.has(track.id)"
           :is-playing="currentTrack?.id === track.id"
-          @update-status="handleStatusUpdate"
           @toggle-prep="handleTogglePrep"
           @toggle-play="handleTogglePlay"
         />
@@ -74,18 +59,10 @@
 const route = useRoute()
 const playlistId = computed(() => route.params.id)
 
-const activeFilter = ref('all')
 const syncing = ref(false)
 const error = ref('')
 const currentTrack = ref(null)
 const prepTrackIds = ref(new Set())
-
-const tabs = [
-  { value: 'all', label: 'All' },
-  { value: 'not_downloaded', label: 'Not Downloaded' },
-  { value: 'downloaded', label: 'Downloaded' },
-  { value: 'need_to_buy', label: 'Need to Buy' }
-]
 
 const { data: playlist, pending, error: fetchError, refresh } = await useFetch(
   () => `/api/playlists/${playlistId.value}`,
@@ -129,23 +106,6 @@ function extractYouTubeId(url) {
   return match ? match[1] : null
 }
 
-const filteredTracks = computed(() => {
-  if (!playlist.value?.tracks) return []
-  if (activeFilter.value === 'all') return playlist.value.tracks
-  return playlist.value.tracks.filter(t => t.status === activeFilter.value)
-})
-
-function getCountForStatus(status) {
-  if (!playlist.value?.tracks) return 0
-  if (status === 'all') return playlist.value.tracks.length
-  return playlist.value.tracks.filter(t => t.status === status).length
-}
-
-function getTrackIndex(track) {
-  if (!playlist.value?.tracks) return 0
-  return playlist.value.tracks.findIndex(t => t.id === track.id) + 1
-}
-
 function formatDate(dateStr) {
   if (!dateStr) return ''
   const date = new Date(dateStr + 'Z')
@@ -170,22 +130,6 @@ async function syncPlaylist() {
   }
 
   syncing.value = false
-}
-
-async function handleStatusUpdate({ trackId, status }) {
-  try {
-    await $fetch(`/api/tracks/${trackId}/status`, {
-      method: 'PATCH',
-      body: { status }
-    })
-    // Update local state
-    const track = playlist.value.tracks.find(t => t.id === trackId)
-    if (track) {
-      track.status = status
-    }
-  } catch (e) {
-    error.value = e.data?.message || 'Failed to update track status'
-  }
 }
 
 async function handleTogglePrep(trackId) {
@@ -298,29 +242,6 @@ h2 {
 
 .sync-btn:hover {
   background: #444;
-}
-
-.filter-tabs {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.tab {
-  padding: 8px 16px;
-  background: #16213e;
-  color: #888;
-  border-radius: 6px;
-  font-size: 0.9rem;
-}
-
-.tab:hover {
-  background: #1a2744;
-}
-
-.tab.active {
-  background: #00dc82;
-  color: #1a1a2e;
 }
 
 .tracks-list {

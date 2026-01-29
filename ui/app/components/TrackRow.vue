@@ -1,5 +1,5 @@
 <template>
-  <div class="track-row" :class="[track.status, { 'in-prep': inPrep }]">
+  <div class="track-row" :class="{ 'in-prep': inPrep }">
     <span class="track-number">{{ index }}.</span>
     <div class="track-actions">
       <button
@@ -24,15 +24,6 @@
     <span class="track-separator">-</span>
     <span class="track-title">{{ track.title }}</span>
     <span v-if="track.duration" class="track-duration">{{ formatDuration(track.duration) }}</span>
-    <select
-      :value="track.status"
-      @change="handleStatusChange"
-      class="status-select"
-    >
-      <option value="not_downloaded">Not Downloaded</option>
-      <option value="downloaded">Downloaded</option>
-      <option value="need_to_buy">Need to Buy</option>
-    </select>
   </div>
 </template>
 
@@ -56,14 +47,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update-status', 'toggle-prep', 'toggle-play'])
-
-function handleStatusChange(event) {
-  emit('update-status', {
-    trackId: props.track.id,
-    status: event.target.value
-  })
-}
+const emit = defineEmits(['toggle-prep', 'toggle-play'])
 
 function togglePrep() {
   emit('toggle-prep', props.track.id)
@@ -92,14 +76,6 @@ function formatDuration(seconds) {
 
 .track-row:last-child {
   border-bottom: none;
-}
-
-.track-row.downloaded {
-  background: #00dc8210;
-}
-
-.track-row.need_to_buy {
-  background: #ffa50210;
 }
 
 .track-row.in-prep {
@@ -173,30 +149,5 @@ function formatDuration(seconds) {
   font-size: 0.85rem;
   min-width: 45px;
   text-align: right;
-}
-
-.status-select {
-  padding: 6px 10px;
-  background: #1a1a2e;
-  border: 1px solid #333;
-  border-radius: 6px;
-  color: #eee;
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-
-.status-select:focus {
-  outline: none;
-  border-color: #00dc82;
-}
-
-.downloaded .status-select {
-  border-color: #00dc82;
-  color: #00dc82;
-}
-
-.need_to_buy .status-select {
-  border-color: #ffa502;
-  color: #ffa502;
 }
 </style>
