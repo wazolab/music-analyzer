@@ -2,3 +2,8 @@ node_modules/
 dist/
 .env
 models/
+
+# Soulseek directories
+downloads/
+incomplete/
+music/

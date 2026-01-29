@@ -12,6 +12,14 @@
         {{ isPlaying ? '⏹' : '▶' }}
       </button>
       <button
+        class="action-btn copy-btn"
+        :class="{ copied }"
+        @click="copySearchText"
+        title="Copy for Soulseek search"
+      >
+        {{ copied ? '✓' : '⎘' }}
+      </button>
+      <button
         class="action-btn prep-btn"
         :class="{ active: inPrep }"
         @click="togglePrep"
@@ -48,6 +56,23 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['toggle-prep', 'toggle-play'])
+
+const copied = ref(false)
+
+function cleanForSearch(text) {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+async function copySearchText() {
+  const searchText = cleanForSearch(`${props.track.artist} ${props.track.title}`)
+  await navigator.clipboard.writeText(searchText)
+  copied.value = true
+  setTimeout(() => { copied.value = false }, 1500)
+}
 
 function togglePrep() {
   emit('toggle-prep', props.track.id)
@@ -116,6 +141,16 @@ function formatDuration(seconds) {
 
 .play-btn:hover,
 .play-btn.playing {
+  background: #00dc82;
+  color: #1a1a2e;
+}
+
+.copy-btn:hover {
+  background: #3498db;
+  color: #fff;
+}
+
+.copy-btn.copied {
   background: #00dc82;
   color: #1a1a2e;
 }

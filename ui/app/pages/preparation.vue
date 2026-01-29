@@ -39,6 +39,14 @@
               {{ currentTrack?.track_id === track.track_id ? '⏹' : '▶' }}
             </button>
             <button
+              class="action-btn copy-btn"
+              :class="{ copied: copiedTrackId === track.track_id }"
+              @click="copySearchText(track)"
+              title="Copy for Soulseek search"
+            >
+              {{ copiedTrackId === track.track_id ? '✓' : '⎘' }}
+            </button>
+            <button
               class="action-btn remove-btn"
               @click="removeTrack(track.track_id)"
               title="Remove from Prep"
@@ -78,6 +86,7 @@ useHead({ title: 'DJ Prep' })
 
 const currentTrack = ref(null)
 const clearing = ref(false)
+const copiedTrackId = ref(null)
 
 const { data: prepList, pending, refresh } = await useFetch('/api/preparation', {
   default: () => []
@@ -123,6 +132,21 @@ function togglePlay(track) {
 
 function stopPlayback() {
   currentTrack.value = null
+}
+
+function cleanForSearch(text) {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+async function copySearchText(track) {
+  const searchText = cleanForSearch(`${track.artist} ${track.title}`)
+  await navigator.clipboard.writeText(searchText)
+  copiedTrackId.value = track.track_id
+  setTimeout(() => { copiedTrackId.value = null }, 1500)
 }
 
 async function removeTrack(trackId) {
@@ -247,6 +271,16 @@ async function clearList() {
 
 .play-btn:hover,
 .play-btn.playing {
+  background: #00dc82;
+  color: #1a1a2e;
+}
+
+.copy-btn:hover {
+  background: #3498db;
+  color: #fff;
+}
+
+.copy-btn.copied {
   background: #00dc82;
   color: #1a1a2e;
 }

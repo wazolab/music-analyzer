@@ -26,7 +26,8 @@ services:
       - "5031:5031"
     volumes:
       - slskd-data:/app
-      - ${DOWNLOADS_DIR:-./downloads}:/downloads
+      - ${DOWNLOADS_DIR:-./downloads}:/app/downloads
+      - ${INCOMPLETE_DIR:-./incomplete}:/app/incomplete
       - ${MUSIC_DIR:-./music}:/music
       - ./slskd.yml:/app/slskd.yml
     environment:
