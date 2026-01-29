@@ -1,4 +1,4 @@
-import { TrackInfo } from './soundcloud.js';
+import { TrackInfo } from './playlist.js';
 
 export interface SlskdConfig {
   baseUrl: string;
@@ -235,10 +235,10 @@ export class SlskdClient {
           // Check if filename contains artist or title (fuzzy match)
           const lowerFilename = filename.toLowerCase();
           const hasArtist = track.artist.toLowerCase().split(' ').some(
-            (word) => word.length > 2 && lowerFilename.includes(word)
+            (word: string) => word.length > 2 && lowerFilename.includes(word)
           );
           const hasTitle = track.title.toLowerCase().split(' ').some(
-            (word) => word.length > 2 && lowerFilename.includes(word)
+            (word: string) => word.length > 2 && lowerFilename.includes(word)
           );
 
           if (hasArtist || hasTitle) {

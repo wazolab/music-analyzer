@@ -6,7 +6,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { runPipeline, showStatus } from './pipeline.js';
 import { AnalyzeOptions } from './types.js';
-import { extractPlaylist, formatTrackList, formatTrackListJson } from './importers/soundcloud.js';
+import { extractPlaylist, formatTrackList, formatTrackListJson } from './importers/playlist.js';
 import { SlskdClient, downloadPlaylist } from './importers/slskd.js';
 
 const program = new Command();

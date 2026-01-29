@@ -13,12 +13,12 @@
 
     <main>
       <section class="soundcloud-section">
-        <h2>Import from SoundCloud</h2>
+        <h2>Import Playlist</h2>
         <div class="input-group">
           <input
             v-model="soundcloudUrl"
             type="text"
-            placeholder="Paste SoundCloud playlist URL..."
+            placeholder="Paste SoundCloud or YouTube playlist URL..."
             @keyup.enter="extractPlaylist"
           />
           <button @click="extractPlaylist" :disabled="extracting || !soundcloudUrl">
@@ -101,7 +101,7 @@ async function extractPlaylist() {
   tracks.value = []
 
   try {
-    const res = await $fetch('/api/soundcloud/extract', {
+    const res = await $fetch('/api/playlist/extract', {
       method: 'POST',
       body: { url: soundcloudUrl.value }
     })

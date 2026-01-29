@@ -13,10 +13,13 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const { url } = body
 
-  if (!url || !url.includes('soundcloud.com')) {
+  const validDomains = ['soundcloud.com', 'youtube.com', 'youtu.be', 'music.youtube.com']
+  const isValidUrl = url && validDomains.some(domain => url.includes(domain))
+
+  if (!isValidUrl) {
     throw createError({
       statusCode: 400,
-      message: 'Invalid SoundCloud URL'
+      message: 'Invalid URL. Supported: SoundCloud, YouTube'
     })
   }
 
