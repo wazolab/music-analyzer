@@ -57,6 +57,8 @@
           <span class="track-artist">{{ track.artist }}</span>
           <span class="track-separator">-</span>
           <span class="track-title">{{ track.title }}</span>
+          <span v-if="track.bpm" class="track-bpm">{{ Math.round(track.bpm) }}</span>
+          <span v-if="track.key_notation" class="track-key">{{ track.key_notation }}</span>
           <span v-if="track.duration" class="track-duration">{{ formatDuration(track.duration) }}</span>
         </div>
       </div>
@@ -302,6 +304,24 @@ async function clearList() {
 .track-title {
   color: #eee;
   flex: 1;
+}
+
+.track-bpm {
+  color: #ffa502;
+  font-size: 0.8rem;
+  padding: 2px 6px;
+  background: rgba(255, 165, 2, 0.15);
+  border-radius: 4px;
+}
+
+.track-key {
+  color: #00dc82;
+  font-size: 0.8rem;
+  padding: 2px 6px;
+  background: rgba(0, 220, 130, 0.15);
+  border-radius: 4px;
+  min-width: 28px;
+  text-align: center;
 }
 
 .track-duration {

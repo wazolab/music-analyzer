@@ -1,7 +1,7 @@
 services:
   ui:
     build:
-      context: ./ui
+      context: ./packages/ui
       dockerfile: Dockerfile
     container_name: music-pipeline-ui
     ports:
@@ -9,6 +9,8 @@ services:
     volumes:
       - ui-data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock
+      - ${DOWNLOADS_DIR:-./downloads}:/app/downloads:ro
+      - /media:/media:rw
     environment:
       - NODE_ENV=production
     depends_on:
@@ -33,6 +35,17 @@ services:
       - SLSKD_SLSK_USERNAME=${SLSKD_USERNAME:-}
       - SLSKD_SLSK_PASSWORD=${SLSKD_PASSWORD:-}
     restart: unless-stopped
+
+  analyzer:
+    build:
+      context: ./packages/analyzer
+      dockerfile: Dockerfile
+    image: music-analyzer
+    profiles:
+      - tools
+    volumes:
+      - ${DOWNLOADS_DIR:-./downloads}:/input:ro
+      - ${MUSIC_DIR:-./music}:/output
 
 volumes:
   ui-data:

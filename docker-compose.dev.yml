@@ -1,17 +1,19 @@
 services:
   ui:
     build:
-      context: ./ui
+      context: ./packages/ui
       dockerfile: Dockerfile.dev
     container_name: music-pipeline-ui-dev
     ports:
       - "3000:3000"
     volumes:
-      - ./ui:/app
+      - ./packages/ui:/app
       - /app/node_modules  # Preserve container's node_modules
       - /app/.nuxt          # Preserve container's .nuxt build cache
       - ui-data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock
+      - ${DOWNLOADS_DIR:-./downloads}:/app/downloads:ro
+      - /media:/media:rw
     environment:
       - NODE_ENV=development
     depends_on:
@@ -34,6 +36,17 @@ services:
       - SLSKD_REMOTE_CONFIGURATION=true
       - SLSKD_SLSK_USERNAME=${SLSKD_USERNAME:-}
       - SLSKD_SLSK_PASSWORD=${SLSKD_PASSWORD:-}
+
+  analyzer:
+    build:
+      context: ./packages/analyzer
+      dockerfile: Dockerfile
+    image: music-analyzer
+    profiles:
+      - tools
+    volumes:
+      - ${DOWNLOADS_DIR:-./downloads}:/input:ro
+      - ${MUSIC_DIR:-./music}:/output
 
 volumes:
   ui-data:
