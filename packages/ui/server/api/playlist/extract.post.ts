@@ -37,14 +37,14 @@ export default defineEventHandler(async (event) => {
     const { spawn } = await import('child_process')
 
     const result = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-      const proc = spawn('yt-dlp', args, { maxBuffer: 50 * 1024 * 1024 })
+      const proc = spawn('yt-dlp', args)
       let stdout = ''
       let stderr = ''
 
-      proc.stdout.on('data', (data) => { stdout += data })
-      proc.stderr.on('data', (data) => { stderr += data })
+      proc.stdout?.on('data', (data: Buffer) => { stdout += data.toString() })
+      proc.stderr?.on('data', (data: Buffer) => { stderr += data.toString() })
 
-      proc.on('close', (code) => {
+      proc.on('close', (_code: number | null) => {
         // Accept exit code 0 or 1 (some videos may fail but others succeed)
         resolve({ stdout, stderr })
       })

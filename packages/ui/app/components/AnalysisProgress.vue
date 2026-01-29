@@ -20,12 +20,22 @@
         Analyzing: {{ job.current_file }}
       </div>
 
+      <!-- Logs section -->
+      <div v-if="job?.logs" class="logs-section">
+        <button @click="showLogs = !showLogs" class="logs-toggle">
+          {{ showLogs ? 'Hide' : 'Show' }} logs
+        </button>
+        <div v-if="showLogs" class="logs-content">
+          <pre>{{ job.logs }}</pre>
+        </div>
+      </div>
+
       <div v-if="job?.status === 'completed'" class="success-message">
         Analysis complete! Files organized to {{ job.output_dir }}
       </div>
 
       <div v-if="job?.status === 'failed'" class="error-message">
-        Analysis failed. Check logs for details.
+        Analysis failed. Check logs above for details.
       </div>
 
       <div class="actions">
@@ -60,6 +70,7 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 
 const cancelling = ref(false)
+const showLogs = ref(true)
 
 // Fetch job status
 const { data: job, refresh } = await useFetch(
@@ -67,14 +78,14 @@ const { data: job, refresh } = await useFetch(
   { default: () => null }
 )
 
-// Poll for updates every 2 seconds while running
+// Poll for updates every second while running
 let pollInterval
 onMounted(() => {
   pollInterval = setInterval(() => {
     if (job.value?.status === 'running' || job.value?.status === 'pending') {
       refresh()
     }
-  }, 2000)
+  }, 1000)
 })
 
 onUnmounted(() => {
@@ -194,6 +205,44 @@ h2 {
   text-align: center;
   color: #ff4757;
   font-size: 0.95rem;
+}
+
+.logs-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.logs-toggle {
+  padding: 6px 12px;
+  background: #1a1a2e;
+  color: #888;
+  font-size: 0.8rem;
+  border-radius: 4px;
+  align-self: flex-start;
+}
+
+.logs-toggle:hover {
+  background: #252545;
+  color: #aaa;
+}
+
+.logs-content {
+  background: #0d0d1a;
+  border-radius: 6px;
+  padding: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.logs-content pre {
+  margin: 0;
+  font-family: 'Monaco', 'Consolas', monospace;
+  font-size: 0.75rem;
+  color: #8a8;
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.4;
 }
 
 .actions {

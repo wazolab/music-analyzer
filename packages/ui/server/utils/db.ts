@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3'
+import Database, { type Database as DatabaseType } from 'better-sqlite3'
 import { join } from 'path'
 import { existsSync, mkdirSync } from 'fs'
 import type { Playlist, Track, TrackStatus, TrackInput, PrepTrack } from './types'
@@ -82,6 +82,13 @@ try {
   // Column already exists
 }
 
+// Migration: Add logs column to analysis_jobs
+try {
+  db.exec('ALTER TABLE analysis_jobs ADD COLUMN logs TEXT')
+} catch (e) {
+  // Column already exists
+}
+
 // Analysis job tables
 db.exec(`
   CREATE TABLE IF NOT EXISTS analysis_jobs (
@@ -92,6 +99,7 @@ db.exec(`
     failed_files INTEGER DEFAULT 0,
     status TEXT DEFAULT 'pending',
     current_file TEXT,
+    logs TEXT,
     started_at TEXT,
     completed_at TEXT,
     created_at TEXT DEFAULT (datetime('now'))
@@ -378,12 +386,29 @@ export function updateAnalysisJobStatus(id: number, status: AnalysisJobStatus, c
   }
 }
 
-export function updateAnalysisJobProgress(id: number, completed: number, failed: number): void {
-  db.prepare(`
-    UPDATE analysis_jobs
-    SET completed_files = ?, failed_files = ?
-    WHERE id = ?
-  `).run(completed, failed, id)
+export function updateAnalysisJobProgress(
+  id: number,
+  completed: number,
+  failed: number,
+  total?: number
+): void {
+  if (total !== undefined) {
+    db.prepare(`
+      UPDATE analysis_jobs
+      SET completed_files = ?, failed_files = ?, total_files = ?
+      WHERE id = ?
+    `).run(completed, failed, total, id)
+  } else {
+    db.prepare(`
+      UPDATE analysis_jobs
+      SET completed_files = ?, failed_files = ?
+      WHERE id = ?
+    `).run(completed, failed, id)
+  }
+}
+
+export function updateAnalysisJobLogs(id: number, logs: string): void {
+  db.prepare('UPDATE analysis_jobs SET logs = ? WHERE id = ?').run(logs, id)
 }
 
 export function setAnalysisJobFiles(jobId: number, fileIds: number[]): void {
@@ -439,6 +464,7 @@ export function updateDownloadFileStatus(id: number, status: DownloadFileStatus,
     db.prepare('UPDATE download_files SET status = ? WHERE id = ?').run(status, id)
   }
 }
+
 
 export function updateDownloadFileAnalysis(id: number, data: {
   bpm?: number

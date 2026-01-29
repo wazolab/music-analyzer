@@ -13,6 +13,7 @@ services:
       - /media:/media:rw
     environment:
       - NODE_ENV=production
+      - HOST_DOWNLOADS_DIR=${DOWNLOADS_DIR:-${PWD}/downloads}
     depends_on:
       - slskd
     restart: unless-stopped

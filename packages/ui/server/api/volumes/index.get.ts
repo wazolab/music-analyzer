@@ -29,7 +29,7 @@ async function getDiskInfo(
     // Use df with specific path to get disk info
     const { stdout } = await execAsync(`df -B1 "${path}" 2>/dev/null | tail -1`)
     const parts = stdout.trim().split(/\s+/)
-    if (parts.length >= 4) {
+    if (parts.length >= 4 && parts[1] && parts[3]) {
       const total = parseInt(parts[1], 10)
       const avail = parseInt(parts[3], 10)
       return {

@@ -63,14 +63,32 @@
           <input type="checkbox" v-model="selectAll" @change="toggleSelectAll">
           Select all ({{ selectedFiles.size }}/{{ files.length }})
         </label>
-        <button
-          v-if="selectedFiles.size > 0"
-          @click="startAnalysis"
-          :disabled="!outputPath || analyzing"
-          class="analyze-btn"
-        >
-          {{ analyzing ? 'Starting...' : `Analyze ${selectedFiles.size} files` }}
-        </button>
+        <div class="selection-actions">
+          <button
+            v-if="analyzedCount > 0"
+            @click="clearAnalyzed"
+            :disabled="deleting"
+            class="clear-btn"
+          >
+            {{ deleting ? 'Deleting...' : `Clear ${analyzedCount} analyzed` }}
+          </button>
+          <button
+            v-if="selectedFiles.size > 0"
+            @click="deleteSelected"
+            :disabled="deleting"
+            class="delete-btn"
+          >
+            {{ deleting ? 'Deleting...' : `Delete ${selectedFiles.size}` }}
+          </button>
+          <button
+            v-if="selectedFiles.size > 0"
+            @click="startAnalysis"
+            :disabled="!outputPath || analyzing"
+            class="analyze-btn"
+          >
+            {{ analyzing ? 'Starting...' : `Analyze ${selectedFiles.size} files` }}
+          </button>
+        </div>
       </div>
 
       <!-- File List Grouped by Folder -->
@@ -109,6 +127,7 @@ const loadingFolders = ref(false)
 const selectedFiles = ref(new Set())
 const selectAll = ref(false)
 const analyzing = ref(false)
+const deleting = ref(false)
 const currentJob = ref(null)
 const refreshing = ref(false)
 
@@ -121,6 +140,11 @@ const { data: downloadsData, pending, refresh } = await useFetch('/api/downloads
 })
 
 const files = computed(() => downloadsData.value?.files || [])
+
+// Count files that have been analyzed (status = 'completed')
+const analyzedCount = computed(() =>
+  files.value.filter(f => f.status === 'completed').length
+)
 
 // Fetch volumes
 const { data: volumes } = await useFetch('/api/volumes', {
@@ -227,6 +251,65 @@ async function startAnalysis() {
   }
 
   analyzing.value = false
+}
+
+async function deleteSelected() {
+  if (selectedFiles.value.size === 0) return
+
+  if (!confirm(`Delete ${selectedFiles.value.size} files from downloads? This cannot be undone.`)) {
+    return
+  }
+
+  deleting.value = true
+
+  try {
+    const result = await $fetch('/api/downloads/delete', {
+      method: 'POST',
+      body: { fileIds: Array.from(selectedFiles.value) }
+    })
+
+    selectedFiles.value = new Set()
+    selectAll.value = false
+    await refresh()
+
+    if (result.failed > 0) {
+      alert(`Deleted ${result.deleted} files. ${result.failed} failed.`)
+    }
+  } catch (e) {
+    console.error('Failed to delete files:', e)
+    alert(e.data?.message || 'Failed to delete files')
+  }
+
+  deleting.value = false
+}
+
+async function clearAnalyzed() {
+  const analyzedFiles = files.value.filter(f => f.status === 'completed')
+  if (analyzedFiles.length === 0) return
+
+  if (!confirm(`Delete ${analyzedFiles.length} analyzed files from downloads? They have already been copied to the output folder.`)) {
+    return
+  }
+
+  deleting.value = true
+
+  try {
+    const result = await $fetch('/api/downloads/delete', {
+      method: 'POST',
+      body: { fileIds: analyzedFiles.map(f => f.id) }
+    })
+
+    await refresh()
+
+    if (result.failed > 0) {
+      alert(`Deleted ${result.deleted} files. ${result.failed} failed.`)
+    }
+  } catch (e) {
+    console.error('Failed to clear analyzed files:', e)
+    alert(e.data?.message || 'Failed to clear files')
+  }
+
+  deleting.value = false
 }
 </script>
 
@@ -389,6 +472,8 @@ async function startAnalysis() {
   padding: 12px 16px;
   background: #16213e;
   border-radius: 8px;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .select-all {
@@ -405,6 +490,12 @@ async function startAnalysis() {
   cursor: pointer;
 }
 
+.selection-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .analyze-btn {
   padding: 10px 24px;
   background: #00dc82;
@@ -417,6 +508,38 @@ async function startAnalysis() {
 }
 
 .analyze-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.delete-btn {
+  padding: 10px 20px;
+  background: #ff4757;
+  color: #fff;
+  font-weight: 500;
+}
+
+.delete-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.delete-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.clear-btn {
+  padding: 10px 20px;
+  background: #f39c12;
+  color: #1a1a2e;
+  font-weight: 500;
+}
+
+.clear-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.clear-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
