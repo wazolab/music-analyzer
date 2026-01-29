@@ -1,5 +1,9 @@
 # Music Analyzer - Project Context
 
+## Project Guidelines
+
+- **README updates**: Always update README.md when adding significant changes or new features (new CLI options, new functionality, architecture changes, new dependencies)
+
 ## Overview
 
 A Node.js/TypeScript CLI for analyzing FLAC music files. Extracts audio features (BPM, key, genre, energy), looks up metadata via MusicBrainz, writes FLAC tags, and organizes files by year/genre/label.
@@ -32,6 +36,9 @@ src/
 │   ├── bandcamp.ts       # Bandcamp web scraping
 │   ├── beatport.ts       # Beatport API / web scraping
 │   └── musicbrainz.ts    # MusicBrainz API client
+├── workers/
+│   ├── audio-worker.ts   # Worker thread for audio analysis
+│   └── pool.ts           # Worker pool management
 └── organizer/
     └── copy.ts           # File organization logic
 ```
@@ -59,6 +66,7 @@ src/
 npm run build          # Compile TypeScript
 npm start              # Run CLI
 node dist/index.js analyze <folder> -o <output>
+node dist/index.js analyze <folder> -o <output> -c 8 -w  # Fast mode with workers
 ```
 
 ## Environment Variables

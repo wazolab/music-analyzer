@@ -33,11 +33,19 @@ export async function generateFingerprint(
   }
 }
 
+let fpcalcInstalled: boolean | null = null;
+
 export async function checkFpcalcInstalled(): Promise<boolean> {
+  if (fpcalcInstalled !== null) {
+    return fpcalcInstalled;
+  }
+
   try {
     await execFileAsync('fpcalc', ['-v']);
-    return true;
+    fpcalcInstalled = true;
   } catch {
-    return false;
+    fpcalcInstalled = false;
   }
+
+  return fpcalcInstalled;
 }

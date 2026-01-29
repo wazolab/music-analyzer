@@ -41,6 +41,7 @@ export interface AnalyzeOptions {
   skipLookup: boolean;
   skipAnalysis: boolean;
   concurrency: number;
+  useWorkers: boolean;
 }
 
 export interface ExistingTags {

@@ -21,7 +21,8 @@ program
   .option('--dry-run', 'Show what would be done without copying', false)
   .option('--skip-lookup', 'Skip MusicBrainz lookup, use existing tags', false)
   .option('--skip-analysis', 'Skip audio analysis, only organize', false)
-  .option('--concurrency <n>', 'Parallel file processing', '1')
+  .option('-c, --concurrency <n>', 'Number of files to process in parallel', '4')
+  .option('-w, --workers', 'Use worker threads for CPU-intensive analysis', false)
   .action(async (input: string, opts) => {
     const inputDir = path.resolve(input);
     const options: AnalyzeOptions = {
@@ -30,6 +31,7 @@ program
       skipLookup: opts.skipLookup,
       skipAnalysis: opts.skipAnalysis,
       concurrency: parseInt(opts.concurrency, 10),
+      useWorkers: opts.workers,
     };
 
     try {

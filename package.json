@@ -23,7 +23,8 @@
     "flac-tagger": "^1.0.0",
     "glob": "^11.0.0",
     "music-metadata": "^10.0.0",
-    "ora": "^8.0.0"
+    "ora": "^8.0.0",
+    "p-limit": "^7.2.0"
   },
   "devDependencies": {
     "@types/cli-progress": "^3.11.6",

@@ -23,8 +23,8 @@ export interface LookupOptions {
 const DEFAULT_SOURCES: MetadataSource[] = ['beatport', 'bandcamp', 'musicbrainz'];
 
 /**
- * Unified metadata lookup that tries multiple sources
- * Order: Beatport (best for electronic) -> Bandcamp (indie/underground) -> MusicBrainz (fingerprint)
+ * Unified metadata lookup that queries all sources in parallel
+ * Returns first successful result, prioritized by source order
  */
 export async function lookupMetadata(
   title: string,
@@ -33,10 +33,11 @@ export async function lookupMetadata(
 ): Promise<LookupResult | null> {
   const sources = options.sources || DEFAULT_SOURCES;
 
-  for (const source of sources) {
-    let result: (MetadataLookup & Partial<AudioAnalysis>) | null = null;
-
+  // Create lookup promises for all sources in parallel
+  const lookupPromises = sources.map(async (source): Promise<LookupResult | null> => {
     try {
+      let result: (MetadataLookup & Partial<AudioAnalysis>) | null = null;
+
       switch (source) {
         case 'beatport':
           result = await searchBeatport(title, artist);
@@ -62,13 +63,22 @@ export async function lookupMetadata(
       }
 
       if (result) {
-        return {
-          ...result,
-          source,
-        };
+        return { ...result, source };
       }
-    } catch (error) {
-      console.warn(`${source} lookup failed:`, error);
+    } catch {
+      // Silently ignore individual source failures
+    }
+
+    return null;
+  });
+
+  // Wait for all lookups to complete
+  const results = await Promise.all(lookupPromises);
+
+  // Return first successful result (maintains priority order)
+  for (const result of results) {
+    if (result) {
+      return result;
     }
   }
 

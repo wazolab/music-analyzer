@@ -5,9 +5,13 @@ import path from 'path';
 import { AudioAnalysis, keyToCamelot, formatKey } from '../types.js';
 import { createRequire } from 'module';
 import { classifyGenre } from './genre.js';
+import { getWorkerPool, terminateWorkerPool } from '../workers/pool.js';
 
 const require = createRequire(import.meta.url);
 const execFileAsync = promisify(execFile);
+
+// Re-export for cleanup
+export { terminateWorkerPool };
 
 const MODELS_DIR = path.join(
   path.dirname(new URL(import.meta.url).pathname),
@@ -57,10 +61,13 @@ export async function ensureModelsDownloaded(): Promise<void> {
   }
 }
 
+let tempFileCounter = 0;
+
 async function decodeFlacToRaw(
   flacPath: string
 ): Promise<{ samples: Float32Array; sampleRate: number }> {
-  const tempFile = `/tmp/music-analyzer-${Date.now()}.raw`;
+  const uniqueId = `${Date.now()}-${process.pid}-${tempFileCounter++}`;
+  const tempFile = `/tmp/music-analyzer-${uniqueId}.raw`;
 
   try {
     await execFileAsync('ffmpeg', [
@@ -174,4 +181,23 @@ export async function analyzeAudio(flacPath: string): Promise<AudioAnalysis> {
       beatPositions,
     },
   };
+}
+
+/**
+ * Analyze audio using worker threads for better CPU utilization
+ */
+export async function analyzeAudioWithWorker(
+  flacPath: string,
+  workerPoolSize?: number
+): Promise<AudioAnalysis> {
+  const pool = getWorkerPool(workerPoolSize);
+  return pool.analyze(flacPath);
+}
+
+/**
+ * Initialize the worker pool (call once at startup for better performance)
+ */
+export async function initializeWorkerPool(size: number): Promise<void> {
+  const pool = getWorkerPool(size);
+  await pool.initialize();
 }

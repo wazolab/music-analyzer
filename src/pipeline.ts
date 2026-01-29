@@ -3,9 +3,16 @@ import { glob } from 'glob';
 import ora from 'ora';
 import cliProgress from 'cli-progress';
 import chalk from 'chalk';
+import pLimit from 'p-limit';
 
 import { AnalyzeOptions, TrackAnalysis, MetadataLookup } from './types.js';
-import { analyzeAudio, ensureModelsDownloaded } from './analyzers/audio.js';
+import {
+  analyzeAudio,
+  analyzeAudioWithWorker,
+  ensureModelsDownloaded,
+  initializeWorkerPool,
+  terminateWorkerPool,
+} from './analyzers/audio.js';
 import { analyzeBeatGrid } from './analyzers/beatgrid.js';
 import { readFlacTags } from './metadata/reader.js';
 import { writeFlacTags, writeAnalysisTags } from './metadata/writer.js';
@@ -58,33 +65,43 @@ export async function runPipeline(
 
   spinner.succeed(`Found ${files.length} FLAC files`);
 
+  const CONCURRENCY = options.concurrency || 4;
+  logInfo(`Processing with ${CONCURRENCY} concurrent workers`);
+
+  // Initialize worker pool if workers enabled
+  if (options.useWorkers && !options.skipAnalysis) {
+    spinner.start('Initializing worker threads...');
+    await initializeWorkerPool(CONCURRENCY);
+    spinner.succeed(`Worker pool initialized (${CONCURRENCY} threads)`);
+  }
+
   // Create output structure
   if (!options.dryRun) {
     await createOutputStructure(options.output);
   }
 
-  // Process files
+  // Process files in parallel
+  const limit = pLimit(CONCURRENCY);
+
   const progressBar = new cliProgress.SingleBar(
     {
       format:
         'Processing |' +
         chalk.cyan('{bar}') +
-        '| {percentage}% | {value}/{total} files | {filename}',
+        `| {percentage}% | {value}/{total} files | ${CONCURRENCY} concurrent`,
       hideCursor: true,
     },
     cliProgress.Presets.shades_classic
   );
 
-  progressBar.start(files.length, 0, { filename: '' });
+  progressBar.start(files.length, 0);
 
   const summary = createOrganizationSummary();
   const errors: Array<{ file: string; error: string }> = [];
+  let completed = 0;
 
-  for (let i = 0; i < files.length; i++) {
-    const filePath = files[i];
+  const processWithLimit = async (filePath: string) => {
     const filename = path.basename(filePath);
-
-    progressBar.update(i, { filename });
 
     try {
       const result = await processFile(filePath, options);
@@ -97,8 +114,12 @@ export async function runPipeline(
       errors.push({ file: filename, error: message });
     }
 
-    progressBar.update(i + 1, { filename });
-  }
+    completed++;
+    progressBar.update(completed);
+  };
+
+  // Process all files with concurrency limit
+  await Promise.all(files.map((filePath) => limit(() => processWithLimit(filePath))));
 
   progressBar.stop();
 
@@ -117,6 +138,11 @@ export async function runPipeline(
   } else {
     logSuccess(`Files organized to: ${options.output}`);
   }
+
+  // Cleanup worker pool if used
+  if (options.useWorkers && !options.skipAnalysis) {
+    await terminateWorkerPool();
+  }
 }
 
 async function processFile(
@@ -131,7 +157,10 @@ async function processFile(
   // Audio analysis
   let analysis;
   if (!options.skipAnalysis) {
-    analysis = await analyzeAudio(filePath);
+    // Use worker threads if enabled, otherwise main thread
+    analysis = options.useWorkers
+      ? await analyzeAudioWithWorker(filePath)
+      : await analyzeAudio(filePath);
     const beatGridAnalysis = analyzeBeatGrid(
       analysis.beatGrid.beatPositions,
       analysis.bpm
