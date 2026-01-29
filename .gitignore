@@ -7,3 +7,6 @@ models/
 downloads/
 incomplete/
 music/
+
+# Database
+*.db
