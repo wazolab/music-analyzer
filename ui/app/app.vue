@@ -1,25 +1,40 @@
 <template>
-  <div class="app">
-    <header>
-      <NuxtLink to="/" class="logo">
+  <div class="dashboard">
+    <aside class="sidebar">
+      <div class="logo">
         <h1>Music Pipeline</h1>
-      </NuxtLink>
-      <div class="slskd-status" :class="slskdStatus">
-        <span class="status-dot"></span>
-        <span>slskd: {{ slskdStatus }}</span>
-        <a v-if="slskdStatus === 'running'" href="http://localhost:5030" target="_blank" class="slskd-link">Open UI</a>
-        <button v-if="slskdStatus === 'stopped'" @click="startSlskd" :disabled="loading">Start</button>
-        <button v-else-if="slskdStatus === 'running'" @click="stopSlskd" :disabled="loading">Stop</button>
       </div>
-    </header>
 
-    <main>
+      <nav class="nav">
+        <NuxtLink to="/" class="nav-item" :class="{ active: route.path === '/' }">
+          <span class="nav-icon">📋</span>
+          <span>Playlists</span>
+        </NuxtLink>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="slskd-status" :class="slskdStatus">
+          <div class="status-row">
+            <span class="status-dot"></span>
+            <span>slskd: {{ slskdStatus }}</span>
+          </div>
+          <div class="status-actions">
+            <a v-if="slskdStatus === 'running'" href="http://localhost:5030" target="_blank" class="slskd-link">Open UI</a>
+            <button v-if="slskdStatus === 'stopped'" @click="startSlskd" :disabled="loading" class="btn-small">Start</button>
+            <button v-else-if="slskdStatus === 'running'" @click="stopSlskd" :disabled="loading" class="btn-small btn-danger">Stop</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content">
       <NuxtPage />
     </main>
   </div>
 </template>
 
 <script setup>
+const route = useRoute()
 const slskdStatus = ref('checking')
 const loading = ref(false)
 const error = ref('')
@@ -76,40 +91,83 @@ body {
   min-height: 100vh;
 }
 
-.app {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 20px;
+.dashboard {
+  display: flex;
+  min-height: 100vh;
 }
 
-header {
+.sidebar {
+  width: 240px;
+  background: #16213e;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px 0;
-  border-bottom: 1px solid #333;
-  margin-bottom: 30px;
+  flex-direction: column;
+  border-right: 1px solid #333;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
 }
 
 .logo {
-  text-decoration: none;
+  padding: 24px 20px;
+  border-bottom: 1px solid #333;
 }
 
 h1 {
-  font-size: 1.5rem;
+  font-size: 1.3rem;
   color: #00dc82;
 }
 
-.slskd-status {
+.nav {
+  flex: 1;
+  padding: 20px 12px;
+}
+
+.nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 0.9rem;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  color: #aaa;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.nav-item:hover {
+  background: #1a2744;
+  color: #eee;
+  text-decoration: none;
+}
+
+.nav-item.active {
+  background: #00dc8220;
+  color: #00dc82;
+}
+
+.nav-icon {
+  font-size: 1.1rem;
+}
+
+.sidebar-footer {
+  padding: 16px;
+  border-top: 1px solid #333;
+}
+
+.slskd-status {
+  font-size: 0.85rem;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .status-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: #666;
 }
@@ -126,17 +184,39 @@ h1 {
   background: #ffa502;
 }
 
+.status-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .slskd-link {
   color: #00dc82;
   text-decoration: none;
-  padding: 8px 12px;
-  background: #16213e;
+  padding: 6px 10px;
+  background: #1a1a2e;
   border-radius: 6px;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 
 .slskd-link:hover {
   background: #1a2744;
+  text-decoration: none;
+}
+
+.btn-small {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+}
+
+.btn-danger {
+  background: #ff4757;
+}
+
+.main-content {
+  flex: 1;
+  margin-left: 240px;
+  padding: 30px 40px;
+  max-width: 1200px;
 }
 
 button {

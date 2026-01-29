@@ -1,5 +1,9 @@
 <template>
-  <div class="index-page">
+  <div class="playlists-page">
+    <header class="page-header">
+      <h1>Playlists</h1>
+    </header>
+
     <section class="import-section">
       <h2>Import Playlist</h2>
       <div class="import-form">
@@ -23,7 +27,7 @@
     </section>
 
     <section class="playlists-section">
-      <h2>My Playlists</h2>
+      <h2>My Playlists ({{ playlists.length }})</h2>
       <div v-if="pending" class="loading">Loading playlists...</div>
       <div v-else-if="playlists.length === 0" class="empty">
         No playlists yet. Import one above!
@@ -101,10 +105,16 @@ async function handleDelete(id) {
 </script>
 
 <style scoped>
-.index-page {
+.playlists-page {
   display: flex;
   flex-direction: column;
-  gap: 40px;
+  gap: 30px;
+}
+
+.page-header h1 {
+  font-size: 1.8rem;
+  color: #eee;
+  margin-bottom: 10px;
 }
 
 h2 {
