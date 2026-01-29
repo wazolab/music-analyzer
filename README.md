@@ -97,6 +97,16 @@ Then start the services:
 docker compose up -d
 ```
 
+### Development Mode (HMR)
+
+For development with hot module replacement:
+
+```bash
+docker compose -f docker-compose.dev.yml up
+```
+
+This mounts your source code and enables live reloading. Changes to Vue files will instantly reflect in the browser.
+
 ### Useful Commands
 
 ```bash

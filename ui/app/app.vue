@@ -38,10 +38,6 @@
 </template>
 
 <script setup>
-useHead({
-  titleTemplate: (title) => title ? `Music Pipeline - ${title}` : 'Music Pipeline'
-})
-
 const route = useRoute()
 const slskdStatus = ref('checking')
 const loading = ref(false)

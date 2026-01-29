@@ -3,6 +3,7 @@
 ## Project Guidelines
 
 - **DRY / KISS**: Write DRY (Don't Repeat Yourself) and KISS (Keep It Simple, Stupid) code. Avoid unnecessary abstractions and over-engineering.
+- **Minimal config**: Less configuration is better. Only add config when absolutely necessary.
 - **Check documentation**: When something doesn't work as expected, consult official documentation before trying alternative approaches.
 - **README updates**: Always update README.md when adding significant changes or new features (new CLI options, new functionality, architecture changes, new dependencies)
 - **Keep dependencies up to date**: This project relies on external services (YouTube, SoundCloud, Soulseek) that frequently change their APIs. When encountering errors related to these services:

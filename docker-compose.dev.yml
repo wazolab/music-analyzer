@@ -1,0 +1,39 @@
+services:
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile.dev
+    container_name: music-pipeline-ui-dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./ui:/app
+      - /app/node_modules  # Preserve container's node_modules
+      - /app/.nuxt          # Preserve container's .nuxt build cache
+      - ui-data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - NODE_ENV=development
+    depends_on:
+      - slskd
+
+  slskd:
+    image: slskd/slskd:latest
+    container_name: music-pipeline-slskd
+    command: ["--no-auth"]
+    ports:
+      - "5030:5030"
+      - "5031:5031"
+    volumes:
+      - slskd-data:/app
+      - ${DOWNLOADS_DIR:-./downloads}:/downloads
+      - ${MUSIC_DIR:-./music}:/music
+      - ./slskd.yml:/app/slskd.yml
+    environment:
+      - SLSKD_REMOTE_CONFIGURATION=true
+      - SLSKD_SLSK_USERNAME=${SLSKD_USERNAME:-}
+      - SLSKD_SLSK_PASSWORD=${SLSKD_PASSWORD:-}
+
+volumes:
+  ui-data:
+  slskd-data:
