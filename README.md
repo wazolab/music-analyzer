@@ -53,6 +53,66 @@ npm install
 npm run build
 ```
 
+## Docker
+
+The project includes a Docker Compose setup with a web UI and Soulseek daemon for downloading music.
+
+### Quick Start
+
+```bash
+# Start all services
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop all services
+docker compose down
+```
+
+### Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| `ui` | 3000 | Web UI for managing the music pipeline |
+| `slskd` | 5030, 5031 | Soulseek daemon for P2P music downloads |
+
+### Environment Variables
+
+Configure in your `.env` file:
+
+```bash
+# Soulseek credentials (auto-connects on startup)
+SLSKD_USERNAME=your-username
+SLSKD_PASSWORD=your-password
+
+# Custom directories (optional, defaults to ./downloads and ./music)
+DOWNLOADS_DIR=/path/to/downloads
+MUSIC_DIR=/path/to/music
+```
+
+Then start the services:
+
+```bash
+docker compose up -d
+```
+
+### Useful Commands
+
+```bash
+# Rebuild after code changes
+docker compose build
+
+# Restart a specific service
+docker compose restart ui
+
+# View slskd logs only
+docker compose logs -f slskd
+
+# Remove volumes (warning: deletes all data)
+docker compose down -v
+```
+
 ### API Keys (Optional)
 
 Copy the example environment file and configure as needed:

@@ -18,6 +18,7 @@ services:
   slskd:
     image: slskd/slskd:latest
     container_name: music-pipeline-slskd
+    command: ["--no-auth"]
     ports:
       - "5030:5030"
       - "5031:5031"
@@ -25,8 +26,11 @@ services:
       - slskd-data:/app
       - ${DOWNLOADS_DIR:-./downloads}:/downloads
       - ${MUSIC_DIR:-./music}:/music
+      - ./slskd.yml:/app/slskd.yml
     environment:
       - SLSKD_REMOTE_CONFIGURATION=true
+      - SLSKD_SLSK_USERNAME=${SLSKD_USERNAME:-}
+      - SLSKD_SLSK_PASSWORD=${SLSKD_PASSWORD:-}
     restart: unless-stopped
 
 volumes:
