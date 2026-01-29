@@ -3,6 +3,10 @@
 ## Project Guidelines
 
 - **README updates**: Always update README.md when adding significant changes or new features (new CLI options, new functionality, architecture changes, new dependencies)
+- **Keep dependencies up to date**: This project relies on external services (YouTube, SoundCloud, Soulseek) that frequently change their APIs. When encountering errors related to these services:
+  - Update yt-dlp first: `sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && sudo chmod a+rx /usr/local/bin/yt-dlp`
+  - Run `npm update` to update Node.js dependencies
+  - Check for breaking changes in essentia.js and TensorFlow.js if audio analysis fails
 
 ## Overview
 
