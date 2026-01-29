@@ -1,8 +1,14 @@
 import Database from 'better-sqlite3'
 import { join } from 'path'
+import { existsSync, mkdirSync } from 'fs'
 import type { Playlist, Track, TrackStatus, TrackInput } from './types'
 
-const dbPath = join(process.cwd(), 'playlists.db')
+// Use /app/data in Docker, otherwise cwd
+const dataDir = process.env.NODE_ENV === 'production' ? '/app/data' : process.cwd()
+if (!existsSync(dataDir)) {
+  mkdirSync(dataDir, { recursive: true })
+}
+const dbPath = join(dataDir, 'playlists.db')
 const db = new Database(dbPath)
 
 // Initialize schema

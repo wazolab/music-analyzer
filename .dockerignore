@@ -1,0 +1,10 @@
+node_modules
+ui/node_modules
+ui/.nuxt
+ui/.output
+dist
+models
+*.db
+.env
+.git
+.claude
