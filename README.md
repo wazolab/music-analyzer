@@ -9,6 +9,7 @@ A Node.js/TypeScript CLI application that analyzes FLAC files, extracts audio fe
   - Musical key detection with Camelot notation (for DJ mixing)
   - Energy level calculation
   - Genre classification using TensorFlow.js (400 Discogs genres)
+  - BPM/key-based heuristics to refine electronic subgenre detection
   - Beat grid / downbeat positions
 
 - **Metadata Lookup** (multiple sources)
@@ -24,6 +25,8 @@ A Node.js/TypeScript CLI application that analyzes FLAC files, extracts audio fe
   - Copies files to `output/by-year/YYYY/`
   - Copies files to `output/by-genre/Genre/`
   - Copies files to `output/by-label/Label/`
+  - Standardized output filenames: `Artist - Title.flac`
+  - Label extraction from filename patterns (see below)
 
 - **Performance Optimizations**
   - Parallel file processing with configurable concurrency
@@ -197,12 +200,71 @@ Input Folder (FLAC files)
 
 The genre classifier uses the MusiCNN model trained on the Discogs dataset with 400 genre/style categories. It analyzes mel-spectrogram features extracted from the audio.
 
-Categories include:
+### Genre Priority
+
+Genres are determined in priority order:
+
+1. **Metadata lookup** (Beatport, Bandcamp) - Most reliable for electronic music
+2. **ML + heuristics** - TensorFlow model refined with BPM/key heuristics
+3. **Existing FLAC tags** - Fallback to tags already in the file
+
+### BPM/Key Heuristics
+
+The analyzer applies genre-specific heuristics to improve classification accuracy for electronic music:
+
+| Genre | BPM Range | Notes |
+|-------|-----------|-------|
+| Trance | 138-150 | Boosted for minor keys |
+| Psy-Trance | 140-150 | Boosted for minor keys |
+| House | 118-132 | |
+| Deep House | 118-128 | |
+| Tech House | 124-132 | |
+| Techno | 125-145 | |
+| Hard Techno | 140-160 | |
+| Drum & Bass | 160-180 | |
+| Dubstep | 138-145 | |
+| Ambient | 60-100 | |
+
+Overly generic genres (like "Rock Country Rock") are demoted when a more specific electronic genre matches the BPM/key profile.
+
+### Specific Genre Extraction
+
+The analyzer extracts specific subgenres from broad categories:
+
+| Raw Classification | Output Genre |
+|-------------------|--------------|
+| Electronic - House | House |
+| Electronic - Hard Trance | Hard Trance |
+| Electronic - Drum n Bass | Drum n Bass |
+| Rock - Alternative Rock | Alternative Rock |
+
+Generic parent genres ("Electronic", "Rock", "Pop") are filtered out when specific subgenres are available.
+
+### Supported Categories
+
 - Electronic (House, Techno, Ambient, Experimental, etc.)
 - Rock, Pop, Hip Hop, Jazz, Classical
 - And many more from the Discogs taxonomy
 
 The model is automatically downloaded on first run (~50MB).
+
+## Label Extraction
+
+Labels are extracted using multiple methods in priority order:
+
+1. **Metadata lookup** - From Beatport, Bandcamp, or MusicBrainz
+2. **Filename parsing** - Supports common naming patterns
+3. **Existing FLAC tags** - From the `LABEL` or `ORGANIZATION` tag
+
+### Supported Filename Patterns
+
+| Pattern | Example | Extracted Label |
+|---------|---------|-----------------|
+| `Artist - Title [Label]` | `Artist - Track Name [Anjunadeep]` | Anjunadeep |
+| `Artist - Title (Label)` | `Artist - Track Name (Drumcode)` | Drumcode |
+| `Label - Artist - Title` | `Anatta Records - Asca - By Proxy` | Anatta Records |
+
+The label detector also recognizes common keywords like "Records", "Recordings", "Music", "Digital", etc.
 
 ## Camelot Key Notation
 
@@ -231,12 +293,13 @@ music-analyzer/
 │   ├── index.ts              # CLI entry point
 │   ├── pipeline.ts           # Main orchestrator
 │   ├── types.ts              # Type definitions
-│   ├── utils.ts              # Helpers
+│   ├── utils.ts              # Helpers (incl. filename parsing)
 │   ├── analyzers/
 │   │   ├── audio.ts          # Essentia.js wrapper
 │   │   ├── beatgrid.ts       # Beat detection
 │   │   ├── fingerprint.ts    # AcoustID wrapper
-│   │   └── genre.ts          # TensorFlow genre classifier
+│   │   ├── genre.ts          # TensorFlow genre classifier
+│   │   └── genre-heuristics.ts # BPM/key-based genre refinement
 │   ├── metadata/
 │   │   ├── reader.ts         # Read FLAC tags
 │   │   ├── writer.ts         # Write FLAC tags

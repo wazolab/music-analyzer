@@ -4,6 +4,12 @@ import { promisify } from 'util';
 import fs from 'fs/promises';
 import path from 'path';
 import { createRequire } from 'module';
+import {
+  refineGenrePredictions,
+  getTopGenres,
+  aggregateGenrePredictions,
+  GenrePrediction,
+} from '../analyzers/genre-heuristics.js';
 
 const require = createRequire(import.meta.url);
 const execFileAsync = promisify(execFile);
@@ -38,6 +44,7 @@ interface AudioAnalysisResult {
   camelotKey: string;
   energy: number;
   genres: string[];
+  genreConfidences?: GenrePrediction[];
   beatGrid: {
     firstBeatMs: number;
     beatPositions: number[];
@@ -128,89 +135,161 @@ async function loadTFModel(): Promise<any> {
   }
 }
 
-function computeMelSpectrogram(
-  samples: Float32Array,
-  sampleRate: number,
-  numFrames: number = 128,
-  numBands: number = 96
-): Float32Array {
+// MusiCNN/Discogs model parameters
+const FRAME_SIZE = 512;
+const HOP_SIZE = 256;
+const MEL_BANDS = 96;
+const PATCH_SIZE = 128; // frames per patch (Discogs model expects 128x96)
+const PATCH_HOP = 64;   // ~1 prediction/second at 16kHz
+const TARGET_SR = 16000;
+
+// Analysis coverage: 65% of track, evenly spaced
+const ANALYSIS_COVERAGE = 0.65;
+const SKIP_RATIO = (1 - ANALYSIS_COVERAGE) / 2;
+
+function resampleTo16k(samples: Float32Array, sampleRate: number): Float32Array {
+  if (sampleRate === TARGET_SR) return samples;
+
+  const ratio = sampleRate / TARGET_SR;
+  const newLength = Math.floor(samples.length / ratio);
+  const resampled = new Float32Array(newLength);
+  for (let i = 0; i < newLength; i++) {
+    resampled[i] = samples[Math.floor(i * ratio)];
+  }
+  return resampled;
+}
+
+function computeMelPatch(audioData: Float32Array, frameOffset: number): Float32Array | null {
   const ess = getEssentia();
-  const frameSize = 512;
-  const hopSize = 256;
-
-  let audioData = samples;
-  let sr = sampleRate;
-  if (sampleRate !== 16000) {
-    const ratio = sampleRate / 16000;
-    const newLength = Math.floor(samples.length / ratio);
-    audioData = new Float32Array(newLength);
-    for (let i = 0; i < newLength; i++) {
-      audioData[i] = samples[Math.floor(i * ratio)];
-    }
-    sr = 16000;
-  }
-
   const melFrames: number[][] = [];
+  const sampleOffset = frameOffset * HOP_SIZE;
+  const samplesNeeded = sampleOffset + FRAME_SIZE + (PATCH_SIZE - 1) * HOP_SIZE;
 
-  for (let i = 0; i + frameSize <= audioData.length && melFrames.length < numFrames; i += hopSize) {
-    const frame = audioData.slice(i, i + frameSize);
+  if (samplesNeeded > audioData.length) return null;
+
+  for (let f = 0; f < PATCH_SIZE; f++) {
+    const sampleStart = sampleOffset + f * HOP_SIZE;
+    const frame = audioData.slice(sampleStart, sampleStart + FRAME_SIZE);
+    if (frame.length < FRAME_SIZE) break;
+
     const frameVector = ess.arrayToVector(frame);
-    const windowed = ess.Windowing(frameVector, true, frameSize, 'hann', 0, true);
-    const spectrum = ess.Spectrum(windowed.frame, frameSize);
-    const spectrumSize = frameSize / 2 + 1;
-    const melBands = ess.MelBands(
-      spectrum.spectrum, sr / 2, spectrumSize, false, 0,
-      'unit_sum', numBands, sr, 'power', 'htkMel', 'warping'
-    );
-    const bands = ess.vectorToArray(melBands.bands);
-    const logBands = bands.map((b: number) => 10 * Math.log10(Math.max(b, 1e-10)));
-    melFrames.push(logBands);
+    // Use TensorflowInputMusiCNN for exact preprocessing match
+    const result = ess.TensorflowInputMusiCNN(frameVector);
+    const bands = ess.vectorToArray(result.bands);
+    melFrames.push(Array.from(bands));
   }
 
-  while (melFrames.length < numFrames) {
-    melFrames.push(new Array(numBands).fill(-100));
-  }
+  if (melFrames.length < PATCH_SIZE) return null;
 
-  const result = new Float32Array(numFrames * numBands);
-  for (let i = 0; i < numFrames; i++) {
-    for (let j = 0; j < numBands; j++) {
-      const val = melFrames[i][j] || -100;
-      result[i * numBands + j] = (val + 100) / 100;
+  const result = new Float32Array(PATCH_SIZE * MEL_BANDS);
+  for (let i = 0; i < PATCH_SIZE; i++) {
+    for (let j = 0; j < MEL_BANDS; j++) {
+      result[i * MEL_BANDS + j] = melFrames[i][j] || 0;
     }
   }
-
   return result;
 }
 
-async function classifyGenre(samples: Float32Array, sampleRate: number): Promise<string[]> {
+// Number of patches to analyze (fewer = faster, more = accurate)
+const TARGET_PATCHES = 10;
+
+function getAllPatchOffsets(totalSamples: number): number[] {
+  const totalFrames = Math.floor((totalSamples - FRAME_SIZE) / HOP_SIZE) + 1;
+  const startFrame = Math.floor(totalFrames * SKIP_RATIO);
+  const endFrame = Math.floor(totalFrames * (1 - SKIP_RATIO)) - PATCH_SIZE;
+
+  if (endFrame <= startFrame) {
+    return startFrame + PATCH_SIZE <= totalFrames ? [startFrame] : [];
+  }
+
+  // Evenly space TARGET_PATCHES patches across the analysis window
+  const offsets: number[] = [];
+  const step = (endFrame - startFrame) / (TARGET_PATCHES - 1);
+
+  for (let i = 0; i < TARGET_PATCHES; i++) {
+    const frameOffset = Math.floor(startFrame + i * step);
+    if (frameOffset + PATCH_SIZE <= totalFrames) {
+      offsets.push(frameOffset);
+    }
+  }
+
+  return offsets;
+}
+
+interface GenreClassificationResult {
+  genres: string[];
+  genreConfidences: GenrePrediction[];
+}
+
+async function classifyPatch(model: any, melPatch: Float32Array): Promise<GenrePrediction[]> {
+  const inputTensor = tf.tensor3d(melPatch, [1, PATCH_SIZE, MEL_BANDS]);
+  const predictions = model.predict(inputTensor) as any;
+  const predictionData = await predictions.data();
+
+  inputTensor.dispose();
+  predictions.dispose();
+
+  return Array.from(predictionData).map((prob, idx) => ({
+    genre: (genreLabels[idx] || `Genre ${idx}`).replace('---', ' - '),
+    confidence: prob as number,
+  }));
+}
+
+/**
+ * Classify genre using segment-level analysis with median aggregation.
+ * Mirrors Essentia's discogs-autotagging approach.
+ */
+async function classifyGenre(
+  samples: Float32Array,
+  sampleRate: number,
+  audioFeatures?: { bpm: number; key: string; energy: number }
+): Promise<GenreClassificationResult> {
   try {
     await loadGenreLabels();
-    if (genreLabels.length === 0) return [];
+    if (genreLabels.length === 0) return { genres: [], genreConfidences: [] };
 
     const model = await loadTFModel();
-    if (!model || !tf) return [];
+    if (!model || !tf) return { genres: [], genreConfidences: [] };
 
-    const melFeatures = computeMelSpectrogram(samples, sampleRate, 128, 96);
-    const inputTensor = tf.tensor3d(melFeatures, [1, 128, 96]);
-    const predictions = model.predict(inputTensor) as any;
-    const predictionData = await predictions.data();
+    // Resample to 16kHz
+    const audioData = resampleTo16k(samples, sampleRate);
 
-    inputTensor.dispose();
-    predictions.dispose();
+    // Get all patch offsets
+    const patchOffsets = getAllPatchOffsets(audioData.length);
+    if (patchOffsets.length === 0) return { genres: [], genreConfidences: [] };
 
-    const indexed = Array.from(predictionData).map((prob, idx) => ({
-      label: genreLabels[idx] || `Genre ${idx}`,
-      probability: prob as number,
-    }));
+    // Process all patches
+    const allPatchPredictions: GenrePrediction[][] = [];
+    for (const frameOffset of patchOffsets) {
+      const melPatch = computeMelPatch(audioData, frameOffset);
+      if (melPatch) {
+        const predictions = await classifyPatch(model, melPatch);
+        allPatchPredictions.push(predictions);
+      }
+    }
 
-    indexed.sort((a, b) => b.probability - a.probability);
+    if (allPatchPredictions.length === 0) return { genres: [], genreConfidences: [] };
 
-    return indexed
-      .filter((g) => g.probability > 0.05)
-      .slice(0, 3)
-      .map((g) => g.label.replace('---', ' - '));
+    // Aggregate using median
+    let genrePredictions = aggregateGenrePredictions(allPatchPredictions);
+
+    // Apply heuristic refinement if audio features provided
+    if (audioFeatures) {
+      genrePredictions = refineGenrePredictions(
+        genrePredictions,
+        audioFeatures.bpm,
+        audioFeatures.key,
+        audioFeatures.energy
+      );
+    }
+
+    // Get top genres
+    const genres = getTopGenres(genrePredictions, 3, 0.05);
+    const topConfidences = genrePredictions.slice(0, 10);
+
+    return { genres, genreConfidences: topConfidences };
   } catch {
-    return [];
+    return { genres: [], genreConfidences: [] };
   }
 }
 
@@ -242,15 +321,20 @@ async function analyzeAudio(flacPath: string): Promise<AudioAnalysisResult> {
   const beatPositions = ticks.map((t: number) => Math.round(t * 1000));
   const firstBeatMs = beatPositions.length > 0 ? beatPositions[0] : 0;
 
-  // Genre classification
-  const genres = await classifyGenre(samples, sampleRate);
+  // Genre classification with heuristic refinement
+  const genreResult = await classifyGenre(samples, sampleRate, {
+    bpm,
+    key: keyString,
+    energy: normalizedEnergy,
+  });
 
   return {
     bpm,
     key: keyString,
     camelotKey,
     energy: normalizedEnergy,
-    genres,
+    genres: genreResult.genres,
+    genreConfidences: genreResult.genreConfidences,
     beatGrid: { firstBeatMs, beatPositions },
   };
 }

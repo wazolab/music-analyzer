@@ -2,6 +2,12 @@ import { createRequire } from 'module';
 import * as tf from '@tensorflow/tfjs-node';
 import fs from 'fs/promises';
 import path from 'path';
+import { GenrePrediction } from '../types.js';
+import {
+  refineGenrePredictions,
+  getTopGenres,
+  aggregateGenrePredictions,
+} from './genre-heuristics.js';
 
 const require = createRequire(import.meta.url);
 
@@ -122,134 +128,232 @@ function getEssentia(): any {
   return essentia;
 }
 
-function computeMelSpectrogram(
-  samples: Float32Array,
-  sampleRate: number,
-  numFrames: number = 128,
-  numBands: number = 96
-): Float32Array {
-  const ess = getEssentia();
+// MusiCNN/Discogs model parameters
+const FRAME_SIZE = 512;
+const HOP_SIZE = 256;
+const MEL_BANDS = 96;
+const PATCH_SIZE = 128; // frames per patch (Discogs model expects 128x96)
+const PATCH_HOP = 64;   // ~1 prediction/second at 16kHz
+const TARGET_SR = 16000;
 
-  const frameSize = 512;
-  const hopSize = 256;
+// Analysis coverage: 65% of track, evenly spaced (skip intro/outro)
+const ANALYSIS_COVERAGE = 0.65;
+const SKIP_RATIO = (1 - ANALYSIS_COVERAGE) / 2; // 17.5% skip at start/end
 
-  // Resample to 16kHz if needed
-  let audioData = samples;
-  let sr = sampleRate;
-  if (sampleRate !== 16000) {
-    const ratio = sampleRate / 16000;
-    const newLength = Math.floor(samples.length / ratio);
-    audioData = new Float32Array(newLength);
-    for (let i = 0; i < newLength; i++) {
-      audioData[i] = samples[Math.floor(i * ratio)];
-    }
-    sr = 16000;
+/**
+ * Resample audio to target sample rate using simple linear interpolation
+ */
+function resampleTo16k(samples: Float32Array, sampleRate: number): Float32Array {
+  if (sampleRate === TARGET_SR) {
+    return samples;
   }
 
+  const ratio = sampleRate / TARGET_SR;
+  const newLength = Math.floor(samples.length / ratio);
+  const resampled = new Float32Array(newLength);
+
+  for (let i = 0; i < newLength; i++) {
+    resampled[i] = samples[Math.floor(i * ratio)];
+  }
+
+  return resampled;
+}
+
+/**
+ * Compute mel-spectrogram for a patch of audio starting at a given frame offset.
+ * Uses Essentia's TensorflowInputMusiCNN for exact preprocessing match.
+ */
+function computeMelPatch(
+  audioData: Float32Array,
+  frameOffset: number
+): Float32Array | null {
+  const ess = getEssentia();
   const melFrames: number[][] = [];
 
-  // Process audio in overlapping frames
-  for (let i = 0; i + frameSize <= audioData.length && melFrames.length < numFrames; i += hopSize) {
-    const frame = audioData.slice(i, i + frameSize);
+  // Calculate sample offset from frame offset
+  const sampleOffset = frameOffset * HOP_SIZE;
+
+  // Check if we have enough samples for a full patch
+  const samplesNeeded = sampleOffset + FRAME_SIZE + (PATCH_SIZE - 1) * HOP_SIZE;
+  if (samplesNeeded > audioData.length) {
+    return null;
+  }
+
+  // Process PATCH_SIZE frames using TensorflowInputMusiCNN
+  for (let f = 0; f < PATCH_SIZE; f++) {
+    const sampleStart = sampleOffset + f * HOP_SIZE;
+    const frame = audioData.slice(sampleStart, sampleStart + FRAME_SIZE);
+
+    if (frame.length < FRAME_SIZE) {
+      break;
+    }
+
     const frameVector = ess.arrayToVector(frame);
 
-    // Apply windowing
-    const windowed = ess.Windowing(frameVector, true, frameSize, 'hann', 0, true);
+    // Use TensorflowInputMusiCNN for exact preprocessing match
+    const result = ess.TensorflowInputMusiCNN(frameVector);
+    const bands = ess.vectorToArray(result.bands);
 
-    // Compute spectrum
-    const spectrum = ess.Spectrum(windowed.frame, frameSize);
-
-    // Compute mel bands (without log - we'll apply log manually)
-    const spectrumSize = frameSize / 2 + 1;
-    const melBands = ess.MelBands(
-      spectrum.spectrum,
-      sr / 2,         // highFrequencyBound
-      spectrumSize,   // inputSize (spectrum size)
-      false,          // log=false, we'll compute log manually
-      0,              // lowFrequencyBound
-      'unit_sum',     // normalize
-      numBands,       // numberBands
-      sr,             // sampleRate
-      'power',        // type
-      'htkMel',       // warpingFormula
-      'warping'       // weighting
-    );
-
-    const bands = ess.vectorToArray(melBands.bands);
-
-    // Apply log scaling manually: 10 * log10(max(x, 1e-10))
-    const logBands = bands.map((b: number) => {
-      const val = Math.max(b, 1e-10);
-      return 10 * Math.log10(val);
-    });
-
-    melFrames.push(logBands);
+    melFrames.push(Array.from(bands));
   }
 
-  // Pad to numFrames if needed
-  while (melFrames.length < numFrames) {
-    melFrames.push(new Array(numBands).fill(-100)); // Silence in dB
+  if (melFrames.length < PATCH_SIZE) {
+    return null;
   }
 
-  // Normalize: scale to roughly 0-1 range
-  // Typical log mel values range from -100 to 0 dB
-  // Normalize to [0, 1] for neural network input
-  const result = new Float32Array(numFrames * numBands);
-  for (let i = 0; i < numFrames; i++) {
-    for (let j = 0; j < numBands; j++) {
-      const val = melFrames[i][j] || -100;
-      // Normalize from [-100, 0] to [0, 1]
-      result[i * numBands + j] = (val + 100) / 100;
+  // Convert to Float32Array
+  const result = new Float32Array(PATCH_SIZE * MEL_BANDS);
+  for (let i = 0; i < PATCH_SIZE; i++) {
+    for (let j = 0; j < MEL_BANDS; j++) {
+      result[i * MEL_BANDS + j] = melFrames[i][j] || 0;
     }
   }
 
   return result;
 }
 
+// Number of patches to analyze (fewer = faster, more = accurate)
+const TARGET_PATCHES = 10;
+
+/**
+ * Get patch frame offsets for analyzing 65% of the track, evenly spaced.
+ * Skips intro (~17.5%) and outro (~17.5%) to focus on the main content.
+ * Returns ~10 evenly spaced patches for fast analysis.
+ */
+function getAllPatchOffsets(totalSamples: number): number[] {
+  // Calculate total frames available
+  const totalFrames = Math.floor((totalSamples - FRAME_SIZE) / HOP_SIZE) + 1;
+
+  // Calculate analysis window (65% of track, centered)
+  const startFrame = Math.floor(totalFrames * SKIP_RATIO);
+  const endFrame = Math.floor(totalFrames * (1 - SKIP_RATIO)) - PATCH_SIZE;
+
+  if (endFrame <= startFrame) {
+    return startFrame + PATCH_SIZE <= totalFrames ? [startFrame] : [];
+  }
+
+  // Evenly space TARGET_PATCHES patches across the analysis window
+  const offsets: number[] = [];
+  const step = (endFrame - startFrame) / (TARGET_PATCHES - 1);
+
+  for (let i = 0; i < TARGET_PATCHES; i++) {
+    const frameOffset = Math.floor(startFrame + i * step);
+    if (frameOffset + PATCH_SIZE <= totalFrames) {
+      offsets.push(frameOffset);
+    }
+  }
+
+  return offsets;
+}
+
+export interface GenreClassificationResult {
+  genres: string[];
+  genreConfidences: GenrePrediction[];
+}
+
+export interface AudioFeatures {
+  bpm: number;
+  key: string;
+  energy: number;
+}
+
+/**
+ * Run inference on a single patch and return raw predictions
+ */
+async function classifyPatch(
+  model: tf.GraphModel,
+  melPatch: Float32Array
+): Promise<GenrePrediction[]> {
+  // Create tensor with shape [1, 128, 96]
+  const inputTensor = tf.tensor3d(melPatch, [1, PATCH_SIZE, MEL_BANDS]);
+
+  // Run inference
+  const predictions = model.predict(inputTensor) as tf.Tensor;
+  const predictionData = await predictions.data();
+
+  // Clean up tensors
+  inputTensor.dispose();
+  predictions.dispose();
+
+  // Convert to GenrePrediction format
+  return Array.from(predictionData).map((prob, idx) => ({
+    genre: (GENRE_LABELS[idx] || `Genre ${idx}`).replace('---', ' - '),
+    confidence: prob as number,
+  }));
+}
+
+/**
+ * Classify genre from audio samples using segment-level analysis.
+ * Mirrors Essentia's discogs-autotagging approach:
+ * - Process entire track with overlapping patches (PATCH_HOP = 64 frames, ~1 pred/sec)
+ * - Aggregate all predictions using median for robustness
+ *
+ * @param samples - Audio samples as Float32Array
+ * @param sampleRate - Sample rate
+ * @param audioFeatures - Optional BPM/key/energy for heuristic refinement
+ * @returns Genre classification result with top genres and confidence scores
+ */
 export async function classifyGenre(
   samples: Float32Array,
-  sampleRate: number
-): Promise<string[]> {
+  sampleRate: number,
+  audioFeatures?: AudioFeatures
+): Promise<GenreClassificationResult> {
   try {
     await loadGenreLabels();
     if (GENRE_LABELS.length === 0) {
-      return [];
+      return { genres: [], genreConfidences: [] };
     }
 
     const model = await loadTFModel();
 
-    // Compute mel-spectrogram features
-    const melFeatures = computeMelSpectrogram(samples, sampleRate, 128, 96);
+    // Resample to 16kHz (required by model)
+    const audioData = resampleTo16k(samples, sampleRate);
 
-    // Create tensor with shape [1, 128, 96]
-    const inputTensor = tf.tensor3d(melFeatures, [1, 128, 96]);
+    // Get all patch offsets for full-track analysis
+    const patchOffsets = getAllPatchOffsets(audioData.length);
 
-    // Run inference
-    const predictions = model.predict(inputTensor) as tf.Tensor;
-    const predictionData = await predictions.data();
+    if (patchOffsets.length === 0) {
+      return { genres: [], genreConfidences: [] };
+    }
 
-    // Clean up tensors
-    inputTensor.dispose();
-    predictions.dispose();
+    // Process all patches and collect predictions
+    const allPatchPredictions: GenrePrediction[][] = [];
 
-    // Get top 3 genres with confidence > 5%
-    const indexed = Array.from(predictionData).map((prob, idx) => ({
-      label: GENRE_LABELS[idx] || `Genre ${idx}`,
-      probability: prob as number,
-    }));
+    for (const frameOffset of patchOffsets) {
+      const melPatch = computeMelPatch(audioData, frameOffset);
+      if (melPatch) {
+        const predictions = await classifyPatch(model, melPatch);
+        allPatchPredictions.push(predictions);
+      }
+    }
 
-    indexed.sort((a, b) => b.probability - a.probability);
+    if (allPatchPredictions.length === 0) {
+      return { genres: [], genreConfidences: [] };
+    }
 
-    // Return top 3 genres (format: remove "---" separator for cleaner display)
-    const topGenres = indexed
-      .filter((g) => g.probability > 0.05)
-      .slice(0, 3)
-      .map((g) => g.label.replace('---', ' - '));
+    // Aggregate all patch predictions using median (robust to intros/outros)
+    let genrePredictions = aggregateGenrePredictions(allPatchPredictions);
 
-    return topGenres;
+    // Apply heuristic refinement if audio features provided
+    if (audioFeatures) {
+      genrePredictions = refineGenrePredictions(
+        genrePredictions,
+        audioFeatures.bpm,
+        audioFeatures.key,
+        audioFeatures.energy
+      );
+    }
+
+    // Get top genres
+    const genres = getTopGenres(genrePredictions, 3, 0.05);
+
+    // Return top 10 for debugging purposes
+    const topConfidences = genrePredictions.slice(0, 10);
+
+    return { genres, genreConfidences: topConfidences };
   } catch (error) {
     console.warn('Genre classification failed:', error);
-    return [];
+    return { genres: [], genreConfidences: [] };
   }
 }
 

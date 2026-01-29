@@ -53,9 +53,26 @@ export async function copyToOrganizedFolders(
 ): Promise<{ success: boolean; paths: string[] }> {
   const copiedPaths: string[] = [];
 
-  for (const [category, targetPath] of Object.entries(outputPaths)) {
+  // Primary copy goes to by-label folder
+  const primaryPath = outputPaths.byLabel;
+  const uniquePrimaryPath = await ensureUniqueFilename(primaryPath, fileExists);
+
+  if (!dryRun) {
+    const primaryDir = path.dirname(uniquePrimaryPath);
+    await fs.mkdir(primaryDir, { recursive: true });
+    await fs.copyFile(sourcePath, uniquePrimaryPath);
+  }
+  copiedPaths.push(uniquePrimaryPath);
+
+  // Create symlinks for by-year and by-genre pointing to by-label
+  // Falls back to copy if symlinks aren't supported (e.g., FAT32/exFAT)
+  const symlinkTargets = [
+    { category: 'byYear', targetPath: outputPaths.byYear },
+    { category: 'byGenre', targetPath: outputPaths.byGenre },
+  ];
+
+  for (const { category, targetPath } of symlinkTargets) {
     try {
-      // Ensure unique filename
       const uniquePath = await ensureUniqueFilename(targetPath, fileExists);
 
       if (dryRun) {
@@ -63,15 +80,24 @@ export async function copyToOrganizedFolders(
         continue;
       }
 
-      // Create directory if it doesn't exist
       const targetDir = path.dirname(uniquePath);
       await fs.mkdir(targetDir, { recursive: true });
 
-      // Copy the file
-      await fs.copyFile(sourcePath, uniquePath);
+      // Try symlink first, fall back to copy if not supported
+      try {
+        const relativePath = path.relative(targetDir, uniquePrimaryPath);
+        await fs.symlink(relativePath, uniquePath);
+      } catch (symlinkError: any) {
+        // EPERM = symlinks not supported (FAT32/exFAT), fall back to copy
+        if (symlinkError.code === 'EPERM' || symlinkError.code === 'ENOTSUP') {
+          await fs.copyFile(uniquePrimaryPath, uniquePath);
+        } else {
+          throw symlinkError;
+        }
+      }
       copiedPaths.push(uniquePath);
     } catch (error) {
-      console.error(`Failed to copy to ${category}:`, error);
+      console.error(`Failed to create link for ${category}:`, error);
       return { success: false, paths: copiedPaths };
     }
   }

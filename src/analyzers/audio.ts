@@ -4,7 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { AudioAnalysis, keyToCamelot, formatKey } from '../types.js';
 import { createRequire } from 'module';
-import { classifyGenre } from './genre.js';
+import { classifyGenre, GenreClassificationResult } from './genre.js';
 import { getWorkerPool, terminateWorkerPool } from '../workers/pool.js';
 
 const require = createRequire(import.meta.url);
@@ -162,10 +162,14 @@ export async function analyzeAudio(flacPath: string): Promise<AudioAnalysis> {
   const beatPositions = ticks.map((t: number) => Math.round(t * 1000));
   const firstBeatMs = beatPositions.length > 0 ? beatPositions[0] : 0;
 
-  // Genre classification using TensorFlow model
-  let genres: string[] = [];
+  // Genre classification using TensorFlow model with heuristic refinement
+  let genreResult: GenreClassificationResult = { genres: [], genreConfidences: [] };
   try {
-    genres = await classifyGenre(samples, sampleRate);
+    genreResult = await classifyGenre(samples, sampleRate, {
+      bpm,
+      key: keyString,
+      energy: normalizedEnergy,
+    });
   } catch (error) {
     console.warn('Genre classification skipped:', error);
   }
@@ -175,7 +179,8 @@ export async function analyzeAudio(flacPath: string): Promise<AudioAnalysis> {
     key: keyString,
     camelotKey,
     energy: normalizedEnergy,
-    genres,
+    genres: genreResult.genres,
+    genreConfidences: genreResult.genreConfidences,
     beatGrid: {
       firstBeatMs,
       beatPositions,

@@ -12,10 +12,64 @@ const ACOUSTID_API_KEY = process.env.ACOUSTID_API_KEY || 'xxxxxxxx';
 let lastRequestTime = 0;
 const MIN_REQUEST_INTERVAL = 1100; // 1.1 seconds to respect rate limits
 
+// Circuit breaker state
+let consecutiveFailures = 0;
+let circuitOpenUntil = 0;
+const MAX_FAILURES = 3;
+const CIRCUIT_RESET_TIME = 30000; // 30 seconds
+
+/**
+ * Fetch with retry logic and exponential backoff
+ */
+async function fetchWithRetry(
+  url: string,
+  options?: RequestInit,
+  maxRetries: number = 2
+): Promise<Response> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+      consecutiveFailures = 0; // Reset on success
+      return response;
+    } catch (error) {
+      lastError = error as Error;
+
+      // Don't retry on abort or if it's the last attempt
+      if (attempt === maxRetries) break;
+
+      // Exponential backoff: 1s, 2s, 4s...
+      const backoffMs = Math.pow(2, attempt) * 1000;
+      await sleep(backoffMs);
+    }
+  }
+
+  consecutiveFailures++;
+  if (consecutiveFailures >= MAX_FAILURES) {
+    circuitOpenUntil = Date.now() + CIRCUIT_RESET_TIME;
+  }
+
+  throw lastError;
+}
+
 async function rateLimitedFetch(
   url: string,
   options?: RequestInit
 ): Promise<Response> {
+  // Check circuit breaker
+  if (Date.now() < circuitOpenUntil) {
+    throw new Error('Circuit breaker open - too many failures');
+  }
+
   const now = Date.now();
   const timeSinceLastRequest = now - lastRequestTime;
 
@@ -30,7 +84,7 @@ async function rateLimitedFetch(
     ...options?.headers,
   };
 
-  return fetch(url, { ...options, headers });
+  return fetchWithRetry(url, { ...options, headers });
 }
 
 interface AcoustIDResult {
@@ -178,12 +232,57 @@ export async function lookupRecording(
   }
 }
 
+/**
+ * Escape special characters for MusicBrainz Lucene query syntax.
+ * Characters that need escaping: + - && || ! ( ) { } [ ] ^ " ~ * ? : \ /
+ */
+function escapeLuceneQuery(str: string): string {
+  return str
+    // Remove or escape characters that cause issues in Lucene queries
+    .replace(/[+\-&|!(){}[\]^"~*?:\\/]/g, ' ')
+    // Remove underscores (often used as separators)
+    .replace(/_/g, ' ')
+    // Remove non-ASCII characters that might cause issues
+    .replace(/[^\x20-\x7E]/g, ' ')
+    // Collapse multiple spaces
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Clean search terms for better matching
+ */
+function cleanSearchTerm(str: string): string {
+  return str
+    // Remove common suffixes that hurt matching
+    .replace(/\s*\(.*?\)\s*$/g, '') // Remove trailing (Remix), (Original Mix), etc.
+    .replace(/\s*\[.*?\]\s*$/g, '') // Remove trailing [Label], etc.
+    .replace(/\s*-\s*(Original|Remix|Edit|Mix|Version|Extended|Radio).*$/i, '')
+    .trim();
+}
+
 export async function searchByMetadata(
   title: string,
   artist: string
 ): Promise<MetadataLookup | null> {
   try {
-    const query = encodeURIComponent(`recording:"${title}" AND artist:"${artist}"`);
+    // Clean and escape search terms
+    const cleanTitle = cleanSearchTerm(title);
+    const cleanArtist = cleanSearchTerm(artist);
+    const safeTitle = escapeLuceneQuery(cleanTitle);
+    const safeArtist = escapeLuceneQuery(cleanArtist);
+
+    // Skip search if we don't have meaningful search terms
+    if (!safeTitle || safeTitle.length < 2) {
+      return null;
+    }
+    if (!safeArtist || safeArtist.length < 2 || safeArtist === 'Unknown Artist') {
+      return null;
+    }
+
+    const query = encodeURIComponent(
+      `recording:"${safeTitle}" AND artist:"${safeArtist}"`
+    );
     const params = new URLSearchParams({
       fmt: 'json',
       limit: '1',
@@ -194,7 +293,7 @@ export async function searchByMetadata(
     );
 
     if (!response.ok) {
-      console.error(`MusicBrainz search error: ${response.statusText}`);
+      // Silently ignore 400 errors (query syntax issues with edge cases)
       return null;
     }
 

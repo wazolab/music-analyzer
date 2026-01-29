@@ -3,6 +3,11 @@ export interface BeatGrid {
   beatPositions: number[];
 }
 
+export interface GenrePrediction {
+  genre: string;
+  confidence: number;
+}
+
 export interface AudioAnalysis {
   bpm: number;
   key: string;
@@ -10,6 +15,7 @@ export interface AudioAnalysis {
   energy: number;
   genres: string[];
   beatGrid: BeatGrid;
+  genreConfidences?: GenrePrediction[]; // Top genre predictions with confidence scores
 }
 
 export interface MetadataLookup {

@@ -14,7 +14,7 @@ import {
   terminateWorkerPool,
 } from './analyzers/audio.js';
 import { analyzeBeatGrid } from './analyzers/beatgrid.js';
-import { readFlacTags } from './metadata/reader.js';
+import { readFlacTags, getMetadataFromFilename } from './metadata/reader.js';
 import { writeFlacTags, writeAnalysisTags } from './metadata/writer.js';
 import { lookupMetadata, getMetadataSourcesStatus } from './metadata/lookup.js';
 import {
@@ -25,7 +25,7 @@ import {
   updateSummary,
   formatSummary,
 } from './organizer/copy.js';
-import { logSuccess, logWarning, logError, logInfo } from './utils.js';
+import { logSuccess, logWarning, logError, logInfo, isLikelyLabel } from './utils.js';
 
 export async function runPipeline(
   inputDir: string,
@@ -154,6 +154,9 @@ async function processFile(
   // Read existing tags
   const existingTags = await readFlacTags(filePath);
 
+  // Parse filename for additional metadata
+  const filenameMetadata = getMetadataFromFilename(filePath);
+
   // Audio analysis
   let analysis;
   if (!options.skipAnalysis) {
@@ -181,28 +184,69 @@ async function processFile(
     };
   }
 
-  // Metadata lookup
+  // Build initial metadata from tags and filename parsing
+  // Handle mislabeled files where artist tag contains the label name
+  // and title tag contains "Artist - Title"
+  let resolvedArtist = existingTags.artist;
+  let resolvedTitle = existingTags.title;
+  let resolvedLabel = existingTags.label || filenameMetadata.label;
+
+  // Detect mislabeled metadata: artist looks like a label, title contains " - "
+  if (
+    existingTags.artist &&
+    existingTags.title &&
+    isLikelyLabel(existingTags.artist) &&
+    existingTags.title.includes(' - ')
+  ) {
+    // Title probably contains "Artist - Title"
+    const titleParts = existingTags.title.split(/\s+-\s+/);
+    if (titleParts.length >= 2) {
+      resolvedArtist = titleParts[0].trim();
+      resolvedTitle = titleParts.slice(1).join(' - ').trim();
+      // Use the artist tag as label if no label is set
+      if (!resolvedLabel) {
+        resolvedLabel = existingTags.artist;
+      }
+    }
+  }
+
+  // Fall back to filename-parsed values if tags are missing
   let metadata: MetadataLookup = {
-    title: existingTags.title || path.basename(filePath, '.flac'),
-    artist: existingTags.artist || 'Unknown Artist',
+    title: resolvedTitle || filenameMetadata.title || path.basename(filePath, '.flac'),
+    artist: resolvedArtist || filenameMetadata.artist || 'Unknown Artist',
     album: existingTags.album,
     year: existingTags.year,
-    label: existingTags.label,
+    label: resolvedLabel,
     mbRecordingId: existingTags.musicbrainzTrackId,
   };
 
+  // Store ML genres before lookup (for fallback)
+  const mlGenres = [...analysis.genres];
+  const mlGenreConfidences = analysis.genreConfidences ? [...analysis.genreConfidences] : [];
+
+  // Lookup metadata from external services
+  let lookupGenres: string[] = [];
+  let lookupLabel: string | undefined;
+
   if (!options.skipLookup) {
     // Try unified metadata lookup (Beatport -> Bandcamp -> MusicBrainz)
-    const lookupResult = await lookupMetadata(
-      metadata.title,
-      metadata.artist,
-      { audioPath: filePath }
-    );
+    const lookupResult = await lookupMetadata(metadata.title, metadata.artist, {
+      audioPath: filePath,
+    });
 
     if (lookupResult) {
+      // Store lookup results for genre/label priority logic
+      lookupGenres = lookupResult.genres || [];
+      lookupLabel = lookupResult.label;
+
+      // Update metadata with lookup results
       metadata = {
         ...metadata,
-        ...lookupResult,
+        title: lookupResult.title || metadata.title,
+        artist: lookupResult.artist || metadata.artist,
+        album: lookupResult.album || metadata.album,
+        year: lookupResult.year || metadata.year,
+        mbRecordingId: lookupResult.mbRecordingId || metadata.mbRecordingId,
       };
 
       // Use BPM/key from Beatport if available and analysis was skipped
@@ -214,18 +258,25 @@ async function processFile(
           analysis.key = lookupResult.key;
         }
       }
-
-      // Use genres from lookup if analysis didn't find any
-      if (analysis.genres.length === 0 && lookupResult.genres) {
-        analysis.genres = lookupResult.genres;
-      }
     }
   }
 
-  // Use existing genre if no genre from analysis
-  if (analysis.genres.length === 0 && existingTags.genre) {
+  // Genre priority: metadata from lookup (Beatport/Bandcamp) > ML + heuristics > existing tags
+  if (lookupGenres.length > 0) {
+    // Use genres from external lookup (most reliable for electronic music)
+    analysis.genres = lookupGenres;
+  } else if (mlGenres.length > 0) {
+    // Fall back to ML + heuristic genres
+    analysis.genres = mlGenres;
+    analysis.genreConfidences = mlGenreConfidences;
+  } else if (existingTags.genre && existingTags.genre.length > 0) {
+    // Fall back to existing tags
     analysis.genres = existingTags.genre;
   }
+
+  // Label priority: lookup > filename parsed > existing tags
+  // Final label resolution
+  metadata.label = lookupLabel || filenameMetadata.label || existingTags.label;
 
   const trackAnalysis: TrackAnalysis = {
     path: filePath,
@@ -235,7 +286,7 @@ async function processFile(
     outputPaths: { byYear: '', byGenre: '', byLabel: '' },
   };
 
-  // Generate output paths
+  // Generate output paths (uses standardized filename: "Artist - Title.flac")
   trackAnalysis.outputPaths = generateOutputPaths(options.output, trackAnalysis);
 
   // Write tags to source file (before copying)
