@@ -11,10 +11,10 @@ A Node.js/TypeScript CLI application that analyzes FLAC files, extracts audio fe
   - Genre classification using TensorFlow.js (400 Discogs genres)
   - Beat grid / downbeat positions
 
-- **Metadata Lookup**
-  - AcoustID audio fingerprinting
-  - MusicBrainz API integration
-  - Retrieves: Artist, Title, Album, Label, Year
+- **Metadata Lookup** (multiple sources)
+  - **Beatport**: BPM, key, genre, label (API or web scraping)
+  - **Bandcamp**: Artist, album, label, year (web scraping)
+  - **MusicBrainz**: AcoustID fingerprinting + API
 
 - **Tag Writing**
   - Writes analysis results to FLAC Vorbis comments
@@ -45,18 +45,30 @@ npm install
 npm run build
 ```
 
-### AcoustID API Key (Optional)
+### API Keys (Optional)
 
-To enable MusicBrainz metadata lookup:
-
-1. Register at https://acoustid.org/
-2. Create an application at https://acoustid.org/new-application
-3. Copy the API key to `.env`:
+Copy the example environment file and configure as needed:
 
 ```bash
 cp .env.example .env
-# Edit .env and add your API key
 ```
+
+**AcoustID** (for MusicBrainz fingerprint lookup):
+1. Register at https://acoustid.org/
+2. Create an application at https://acoustid.org/new-application
+3. Add `ACOUSTID_API_KEY` to `.env`
+
+**Beatport API** (optional - web scraping used if not set):
+1. Email engineering@beatport.com to request OAuth2 credentials
+2. Add credentials to `.env`:
+   ```
+   BEATPORT_CLIENT_ID=xxx
+   BEATPORT_CLIENT_SECRET=xxx
+   BEATPORT_USERNAME=xxx
+   BEATPORT_PASSWORD=xxx
+   ```
+
+**Bandcamp**: No API key needed (uses web scraping)
 
 ## Usage
 
@@ -128,10 +140,10 @@ Input Folder (FLAC files)
          │
          ▼
 ┌─────────────────────────────────────┐
-│ 2. METADATA LOOKUP (Optional)      │
-│    • Generate AcoustID fingerprint │
-│    • Query MusicBrainz API         │
-│    • Get artist, title, label, year│
+│ 2. METADATA LOOKUP (Multi-source)  │
+│    • Beatport: BPM, key, genre     │
+│    • Bandcamp: label, year, album  │
+│    • MusicBrainz: fingerprint match│
 └─────────────────────────────────────┘
          │
          ▼

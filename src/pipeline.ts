@@ -7,10 +7,9 @@ import chalk from 'chalk';
 import { AnalyzeOptions, TrackAnalysis, MetadataLookup } from './types.js';
 import { analyzeAudio, ensureModelsDownloaded } from './analyzers/audio.js';
 import { analyzeBeatGrid } from './analyzers/beatgrid.js';
-import { checkFpcalcInstalled } from './analyzers/fingerprint.js';
 import { readFlacTags } from './metadata/reader.js';
 import { writeFlacTags, writeAnalysisTags } from './metadata/writer.js';
-import { lookupByFingerprint, searchByMetadata } from './metadata/musicbrainz.js';
+import { lookupMetadata, getMetadataSourcesStatus } from './metadata/lookup.js';
 import {
   generateOutputPaths,
   copyToOrganizedFolders,
@@ -30,12 +29,14 @@ export async function runPipeline(
   // Check prerequisites
   spinner.start('Checking prerequisites...');
 
-  const hasFpcalc = await checkFpcalcInstalled();
-  if (!hasFpcalc && !options.skipLookup) {
-    spinner.warn(
-      'fpcalc not found. Install with: sudo apt install libchromaprint-tools'
-    );
-    logWarning('Fingerprint lookup will be skipped');
+  const sourcesStatus = await getMetadataSourcesStatus();
+  if (!options.skipLookup) {
+    const availableSources = Object.entries(sourcesStatus)
+      .filter(([, status]) => status.available)
+      .map(([name]) => name);
+    if (availableSources.length > 0) {
+      logInfo(`Metadata sources: ${availableSources.join(', ')}`);
+    }
   }
 
   if (!options.skipAnalysis) {
@@ -86,7 +87,7 @@ export async function runPipeline(
     progressBar.update(i, { filename });
 
     try {
-      const result = await processFile(filePath, options, hasFpcalc);
+      const result = await processFile(filePath, options);
 
       if (result) {
         updateSummary(summary, result);
@@ -120,8 +121,7 @@ export async function runPipeline(
 
 async function processFile(
   filePath: string,
-  options: AnalyzeOptions,
-  hasFpcalc: boolean
+  options: AnalyzeOptions
 ): Promise<TrackAnalysis | null> {
   const filename = path.basename(filePath);
 
@@ -162,26 +162,33 @@ async function processFile(
     mbRecordingId: existingTags.musicbrainzTrackId,
   };
 
-  if (!options.skipLookup && hasFpcalc) {
-    // Try fingerprint lookup
-    const lookupResult = await lookupByFingerprint(filePath);
+  if (!options.skipLookup) {
+    // Try unified metadata lookup (Beatport -> Bandcamp -> MusicBrainz)
+    const lookupResult = await lookupMetadata(
+      metadata.title,
+      metadata.artist,
+      { audioPath: filePath }
+    );
 
     if (lookupResult) {
       metadata = {
         ...metadata,
         ...lookupResult,
       };
-    } else if (existingTags.title && existingTags.artist) {
-      // Fall back to metadata search
-      const searchResult = await searchByMetadata(
-        existingTags.title,
-        existingTags.artist
-      );
-      if (searchResult) {
-        metadata = {
-          ...metadata,
-          ...searchResult,
-        };
+
+      // Use BPM/key from Beatport if available and analysis was skipped
+      if (options.skipAnalysis) {
+        if (lookupResult.bpm) {
+          analysis.bpm = lookupResult.bpm;
+        }
+        if (lookupResult.key) {
+          analysis.key = lookupResult.key;
+        }
+      }
+
+      // Use genres from lookup if analysis didn't find any
+      if (analysis.genres.length === 0 && lookupResult.genres) {
+        analysis.genres = lookupResult.genres;
       }
     }
   }
@@ -233,46 +240,53 @@ export async function showStatus(): Promise<void> {
 
   spinner.start('Checking system status...');
 
-  // Check fpcalc
-  const hasFpcalc = await checkFpcalcInstalled();
+  // Check metadata sources
+  const sourcesStatus = await getMetadataSourcesStatus();
+
+  // Check for ffmpeg
+  let hasFFmpeg = false;
+  try {
+    const { execFile } = await import('child_process');
+    const { promisify } = await import('util');
+    const execFileAsync = promisify(execFile);
+    await execFileAsync('ffmpeg', ['-version']);
+    hasFFmpeg = true;
+  } catch {
+    hasFFmpeg = false;
+  }
 
   spinner.stop();
 
   console.log('\nSystem Status:');
   console.log('==============');
 
-  if (hasFpcalc) {
-    logSuccess('fpcalc: installed');
-  } else {
-    logError(
-      'fpcalc: not found (install with: sudo apt install libchromaprint-tools)'
-    );
-  }
-
-  // Check for ffmpeg
-  try {
-    const { execFile } = await import('child_process');
-    const { promisify } = await import('util');
-    const execFileAsync = promisify(execFile);
-    await execFileAsync('ffmpeg', ['-version']);
+  // Audio processing
+  console.log('\nAudio Processing:');
+  if (hasFFmpeg) {
     logSuccess('ffmpeg: installed');
-  } catch {
+  } else {
     logError('ffmpeg: not found (required for audio decoding)');
   }
 
-  // Check AcoustID API key
-  if (
-    process.env.ACOUSTID_API_KEY &&
-    process.env.ACOUSTID_API_KEY !== 'xxxxxxxx'
-  ) {
-    logSuccess('AcoustID API key: configured');
+  // Metadata sources
+  console.log('\nMetadata Sources:');
+  for (const [source, status] of Object.entries(sourcesStatus)) {
+    if (status.available) {
+      logSuccess(`${source}: ${status.reason}`);
+    } else {
+      logWarning(`${source}: ${status.reason}`);
+    }
+  }
+
+  // Beatport API (optional)
+  if (process.env.BEATPORT_CLIENT_ID) {
+    logSuccess('Beatport API: credentials configured');
   } else {
-    logWarning(
-      'AcoustID API key: not configured (set ACOUSTID_API_KEY environment variable)'
-    );
+    logInfo('Beatport API: using web scraping (API credentials optional)');
   }
 
   console.log('\nUsage:');
   console.log('  music-analyzer analyze <input-folder> -o <output-folder>');
   console.log('  music-analyzer analyze ./music --dry-run');
+  console.log('  music-analyzer analyze ./music --skip-lookup');
 }

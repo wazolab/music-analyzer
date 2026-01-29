@@ -28,6 +28,9 @@ src/
 ├── metadata/
 │   ├── reader.ts         # Read FLAC tags (music-metadata)
 │   ├── writer.ts         # Write FLAC tags (flac-tagger)
+│   ├── lookup.ts         # Unified metadata lookup (all sources)
+│   ├── bandcamp.ts       # Bandcamp web scraping
+│   ├── beatport.ts       # Beatport API / web scraping
 │   └── musicbrainz.ts    # MusicBrainz API client
 └── organizer/
     └── copy.ts           # File organization logic
