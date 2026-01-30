@@ -4,10 +4,17 @@
       <h1>Library</h1>
       <div class="header-actions">
         <button
+          :disabled="scanningDownloads"
+          class="scan-downloads-btn"
+          @click="scanDownloads"
+        >
+          {{ scanningDownloads ? 'Scanning...' : 'Scan Downloads' }}
+        </button>
+        <button
           class="scan-btn"
           @click="openScanModal"
         >
-          Scan Storage
+          Scan External
         </button>
         <button
           :disabled="refreshing"
@@ -24,26 +31,134 @@
       v-if="stats"
       class="stats-bar"
     >
-      <div class="stat">
-        <span class="stat-value">{{ stats.total }}</span>
-        <span class="stat-label">Tracks</span>
+      <div class="stats-info">
+        <div class="stat">
+          <span class="stat-value">{{ stats.total }}</span>
+          <span class="stat-label">Tracks</span>
+        </div>
+        <div class="stat">
+          <span class="stat-value">{{ stats.byGenre?.length || 0 }}</span>
+          <span class="stat-label">Genres</span>
+        </div>
+        <div class="stat">
+          <span class="stat-value">{{ stats.byLabel?.length || 0 }}</span>
+          <span class="stat-label">Labels</span>
+        </div>
+        <div class="stat">
+          <span
+            class="stat-value"
+            :class="{ offline: offlineCount > 0 }"
+          >{{ offlineCount }}</span>
+          <span class="stat-label">Offline</span>
+        </div>
       </div>
-      <div class="stat">
-        <span class="stat-value">{{ stats.byGenre?.length || 0 }}</span>
-        <span class="stat-label">Genres</span>
-      </div>
-      <div class="stat">
-        <span class="stat-value">{{ stats.byLabel?.length || 0 }}</span>
-        <span class="stat-label">Labels</span>
-      </div>
-      <div class="stat">
-        <span
-          class="stat-value"
-          :class="{ offline: offlineCount > 0 }"
-        >{{ offlineCount }}</span>
-        <span class="stat-label">Offline</span>
+      <div
+        v-if="selectedTracks.size > 0"
+        class="selection-actions"
+      >
+        <span class="selection-count">{{ selectedTracks.size }} selected</span>
+        <button
+          v-if="singleSelectedTrack"
+          class="musicbrainz-btn"
+          @click="openMusicBrainzModal(singleSelectedTrack)"
+        >
+          Link to MusicBrainz
+        </button>
+        <button
+          :disabled="analyzing"
+          class="reanalyze-btn"
+          @click="reanalyzeSelected"
+        >
+          {{ analyzing ? 'Analyzing...' : 'Re-analyze' }}
+        </button>
+        <button
+          class="publish-btn"
+          @click="showPublishModal = true"
+        >
+          Publish to Drive
+        </button>
       </div>
     </div>
+
+    <!-- Pending Section (collapsible) -->
+    <section
+      v-if="pendingTracks.length > 0"
+      class="pending-section"
+    >
+      <div
+        class="pending-header"
+        @click="showPending = !showPending"
+      >
+        <h2>
+          <span class="collapse-icon">{{ showPending ? '−' : '+' }}</span>
+          Pending Analysis ({{ pendingTracks.length }})
+        </h2>
+        <span
+          v-if="!showPending"
+          class="pending-hint"
+        >Click to expand</span>
+      </div>
+
+      <div
+        v-if="showPending"
+        class="pending-content"
+      >
+        <div class="selection-bar">
+          <label class="select-all">
+            <input
+              v-model="selectAllPending"
+              type="checkbox"
+              @change="toggleSelectAllPending"
+            >
+            Select all ({{ selectedPending.size }}/{{ pendingTracks.length }})
+          </label>
+          <div class="pending-actions">
+            <button
+              v-if="selectedPending.size > 0"
+              :disabled="deleting"
+              class="delete-btn"
+              @click="deleteSelectedPending"
+            >
+              {{ deleting ? 'Deleting...' : `Delete ${selectedPending.size}` }}
+            </button>
+            <button
+              v-if="selectedPending.size > 0"
+              :disabled="analyzing"
+              class="analyze-btn"
+              @click="analyzeSelected"
+            >
+              {{ analyzing ? 'Analyzing...' : `Analyze ${selectedPending.size}` }}
+            </button>
+          </div>
+        </div>
+
+        <div class="pending-list">
+          <div
+            v-for="track in pendingTracks"
+            :key="track.id"
+            class="pending-item"
+            :class="{ selected: selectedPending.has(track.id) }"
+            @click="togglePendingSelect(track.id)"
+          >
+            <input
+              type="checkbox"
+              :checked="selectedPending.has(track.id)"
+              @click.stop="togglePendingSelect(track.id)"
+            >
+            <span class="pending-filename">{{ getFilename(track.file_path) }}</span>
+            <span class="pending-source badge">{{ track.source || 'downloads' }}</span>
+            <span
+              v-if="track.analysis_status === 'failed'"
+              class="pending-status badge failed"
+            >failed</span>
+            <span
+              v-else-if="track.analysis_status === 'analyzing'"
+              class="pending-status badge analyzing"
+            >analyzing</span>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <!-- Filters -->
     <div class="filters">
@@ -56,9 +171,10 @@
       <select
         v-model="filterGenre"
         class="filter-select"
+        :disabled="uniqueGenres.length === 0"
       >
         <option value="">
-          All Genres
+          {{ uniqueGenres.length === 0 ? 'No Genres' : 'All Genres' }}
         </option>
         <option
           v-for="g in uniqueGenres"
@@ -71,9 +187,10 @@
       <select
         v-model="filterLabel"
         class="filter-select"
+        :disabled="uniqueLabels.length === 0"
       >
         <option value="">
-          All Labels
+          {{ uniqueLabels.length === 0 ? 'No Labels' : 'All Labels' }}
         </option>
         <option
           v-for="l in uniqueLabels"
@@ -86,9 +203,10 @@
       <select
         v-model="filterYear"
         class="filter-select"
+        :disabled="uniqueYears.length === 0"
       >
         <option value="">
-          All Years
+          {{ uniqueYears.length === 0 ? 'No Years' : 'All Years' }}
         </option>
         <option
           v-for="y in uniqueYears"
@@ -184,8 +302,15 @@
               v-for="track in group.tracks"
               :key="track.id"
               class="track-item"
-              :class="{ offline: track.storage_status === 'offline' }"
+              :class="{ offline: track.storage_status === 'offline', selected: selectedTracks.has(track.id) }"
+              @click="toggleTrackSelect(track.id)"
             >
+              <input
+                type="checkbox"
+                class="track-checkbox"
+                :checked="selectedTracks.has(track.id)"
+                @click.stop="toggleTrackSelect(track.id)"
+              >
               <div class="track-info">
                 <span class="track-title">
                   <span
@@ -227,6 +352,13 @@
         <table class="tracks-table">
           <thead>
             <tr>
+              <th class="checkbox-col">
+                <input
+                  type="checkbox"
+                  :checked="selectAllLibrary"
+                  @change="toggleSelectAllLibrary"
+                >
+              </th>
               <th>Artist</th>
               <th>Title</th>
               <th>Album</th>
@@ -242,8 +374,16 @@
             <tr
               v-for="track in filteredTracks"
               :key="track.id"
-              :class="{ offline: track.storage_status === 'offline' }"
+              :class="{ offline: track.storage_status === 'offline', selected: selectedTracks.has(track.id) }"
+              @click="toggleTrackSelect(track.id)"
             >
+              <td class="checkbox-col">
+                <input
+                  type="checkbox"
+                  :checked="selectedTracks.has(track.id)"
+                  @click.stop="toggleTrackSelect(track.id)"
+                >
+              </td>
               <td>{{ track.artist || '-' }}</td>
               <td>{{ track.title || '-' }}</td>
               <td>{{ track.album || '-' }}</td>
@@ -401,6 +541,117 @@
         </div>
       </div>
     </div>
+
+    <!-- Analysis Progress Modal -->
+    <AnalysisProgress
+      v-if="currentJob"
+      :job-id="currentJob.id"
+      @close="handleJobClose"
+    />
+
+    <!-- Publish Modal -->
+    <PublishModal
+      v-if="showPublishModal"
+      :track-ids="Array.from(selectedTracks)"
+      :volumes="volumes"
+      @close="showPublishModal = false"
+      @published="handlePublished"
+    />
+
+    <!-- MusicBrainz Linking Modal -->
+    <div
+      v-if="showMusicBrainzModal"
+      class="modal-overlay"
+      @click.self="closeMusicBrainzModal"
+    >
+      <div class="modal musicbrainz-modal">
+        <h2>Link to MusicBrainz</h2>
+        <p
+          v-if="linkingTrack"
+          class="track-preview"
+        >
+          {{ linkingTrack.artist || 'Unknown' }} - {{ linkingTrack.title || 'Unknown' }}
+        </p>
+
+        <div
+          v-if="linkingResult"
+          class="linking-result"
+          :class="{ success: linkingResult.success, error: !linkingResult.success }"
+        >
+          <p v-if="linkingResult.success">
+            Linked to: {{ linkingResult.track.artist }} - {{ linkingResult.track.title }}
+            <template v-if="linkingResult.track.album">
+              <br><small>Album: {{ linkingResult.track.album }}</small>
+            </template>
+            <template v-if="linkingResult.track.label">
+              <br><small>Label: {{ linkingResult.track.label }}</small>
+            </template>
+            <template v-if="linkingResult.track.year">
+              <br><small>Year: {{ linkingResult.track.year }}</small>
+            </template>
+            <template v-if="linkingResult.fingerprintSubmitted">
+              <br><small class="fingerprint-note">Fingerprint submitted to AcoustID</small>
+            </template>
+          </p>
+          <p v-else>
+            {{ linkingResult.error }}
+          </p>
+        </div>
+
+        <div
+          v-if="!linkingResult?.success"
+          class="form-group"
+        >
+          <label for="musicbrainz-id">MusicBrainz Recording ID</label>
+          <input
+            id="musicbrainz-id"
+            v-model="musicBrainzId"
+            type="text"
+            placeholder="e.g., 943e90e3-0665-4b96-8163-b528eaef22cc"
+            :disabled="linkingInProgress"
+          >
+          <small class="input-hint">
+            Find the recording on
+            <a
+              href="https://musicbrainz.org"
+              target="_blank"
+            >MusicBrainz</a>
+            and copy the ID from the URL
+          </small>
+        </div>
+
+        <div
+          v-if="!linkingResult?.success"
+          class="form-group checkbox-group"
+        >
+          <label>
+            <input
+              v-model="musicBrainzSubmitFingerprint"
+              type="checkbox"
+              :disabled="linkingInProgress"
+            >
+            Submit fingerprint to AcoustID (helps future lookups)
+          </label>
+        </div>
+
+        <div class="modal-actions">
+          <button
+            class="cancel-btn"
+            @click="closeMusicBrainzModal"
+          >
+            {{ linkingResult?.success ? 'Close' : 'Cancel' }}
+          </button>
+          <button
+            v-if="!linkingResult?.success"
+            class="link-btn"
+            :disabled="!musicBrainzId || linkingInProgress"
+            @click="linkToMusicBrainz"
+          >
+            {{ linkingInProgress ? 'Linking...' : 'Link' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -424,13 +675,45 @@ const scanning = ref(false)
 const scanResult = ref(null)
 const volumes = ref([])
 const loadingVolumes = ref(false)
+const scanningDownloads = ref(false)
+
+// Pending section
+const showPending = ref(true)
+const selectedPending = ref(new Set())
+const selectAllPending = ref(false)
+
+// Library selection
+const selectedTracks = ref(new Set())
+const selectAllLibrary = ref(false)
+
+// Analysis
+const analyzing = ref(false)
+const deleting = ref(false)
+const currentJob = ref(null)
+
+// Publish modal
+const showPublishModal = ref(false)
+
+// MusicBrainz linking modal
+const showMusicBrainzModal = ref(false)
+const musicBrainzId = ref('')
+const musicBrainzSubmitFingerprint = ref(true)
+const linkingTrack = ref(null)
+const linkingInProgress = ref(false)
+const linkingResult = ref(null)
 
 // Fetch library
 const { data: libraryData, pending, refresh } = await useFetch('/api/library', {
-  default: () => ({ tracks: [], stats: { total: 0, byGenre: [], byLabel: [], byYear: [], byStatus: [] } }),
+  default: () => ({
+    tracks: [],
+    pendingTracks: [],
+    stats: { total: 0, byGenre: [], byLabel: [], byYear: [], byStatus: [] },
+    settings: {},
+  }),
 })
 
 const tracks = computed(() => libraryData.value?.tracks || [])
+const pendingTracks = computed(() => libraryData.value?.pendingTracks || [])
 const stats = computed(() => libraryData.value?.stats)
 
 const offlineCount = computed(() => {
@@ -438,18 +721,16 @@ const offlineCount = computed(() => {
   return statusStat?.count || 0
 })
 
-// Extract unique values for filters
+// Extract unique values for filters (only primary genre per track)
 const uniqueGenres = computed(() => {
   const genres = new Set()
   for (const track of tracks.value) {
     if (track.genres) {
       try {
         const parsed = typeof track.genres === 'string' ? JSON.parse(track.genres) : track.genres
-        if (Array.isArray(parsed)) {
-          for (const g of parsed) {
-            const simplified = g.includes('---') ? g.split('---')[1] : g
-            genres.add(simplified)
-          }
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const primaryGenre = parsed[0].includes('---') ? parsed[0].split('---')[1] : parsed[0]
+          genres.add(primaryGenre)
         }
       }
       catch {
@@ -620,6 +901,235 @@ async function startScan() {
 
   scanning.value = false
 }
+
+// Scan downloads folder
+async function scanDownloads() {
+  scanningDownloads.value = true
+
+  try {
+    const result = await $fetch('/api/library/scan', {
+      method: 'POST',
+      body: {
+        path: '/app/downloads',
+        source: 'downloads',
+        recursive: true,
+      },
+    })
+
+    if (result.needsAnalysis > 0) {
+      showPending.value = true
+    }
+    await refresh()
+  }
+  catch (e) {
+    console.error('Scan downloads failed:', e)
+    alert(e.data?.message || 'Failed to scan downloads')
+  }
+
+  scanningDownloads.value = false
+}
+
+// Get filename from path
+function getFilename(filePath) {
+  if (!filePath) return 'Unknown file'
+  return filePath.split('/').pop() || filePath
+}
+
+// Pending selection
+function togglePendingSelect(trackId) {
+  if (selectedPending.value.has(trackId)) {
+    selectedPending.value.delete(trackId)
+  }
+  else {
+    selectedPending.value.add(trackId)
+  }
+  selectedPending.value = new Set(selectedPending.value)
+  selectAllPending.value = selectedPending.value.size === pendingTracks.value.length
+}
+
+function toggleSelectAllPending() {
+  if (selectAllPending.value) {
+    selectedPending.value = new Set(pendingTracks.value.map(t => t.id))
+  }
+  else {
+    selectedPending.value = new Set()
+  }
+}
+
+// Library track selection
+function toggleTrackSelect(trackId) {
+  if (selectedTracks.value.has(trackId)) {
+    selectedTracks.value.delete(trackId)
+  }
+  else {
+    selectedTracks.value.add(trackId)
+  }
+  selectedTracks.value = new Set(selectedTracks.value)
+  selectAllLibrary.value = selectedTracks.value.size === filteredTracks.value.length
+}
+
+function toggleSelectAllLibrary() {
+  if (selectAllLibrary.value) {
+    selectedTracks.value = new Set(filteredTracks.value.map(t => t.id))
+  }
+  else {
+    selectedTracks.value = new Set()
+  }
+  selectAllLibrary.value = !selectAllLibrary.value
+}
+
+// Analysis functions
+async function analyzeSelected() {
+  if (selectedPending.value.size === 0) return
+
+  analyzing.value = true
+
+  try {
+    const response = await $fetch('/api/analyze/start', {
+      method: 'POST',
+      body: {
+        trackIds: Array.from(selectedPending.value),
+      },
+    })
+
+    currentJob.value = response.job
+    selectedPending.value = new Set()
+    selectAllPending.value = false
+  }
+  catch (e) {
+    console.error('Failed to start analysis:', e)
+    alert(e.data?.message || 'Failed to start analysis')
+  }
+
+  analyzing.value = false
+}
+
+async function reanalyzeSelected() {
+  if (selectedTracks.value.size === 0) return
+
+  analyzing.value = true
+
+  try {
+    const response = await $fetch('/api/analyze/start', {
+      method: 'POST',
+      body: {
+        trackIds: Array.from(selectedTracks.value),
+        forceReanalyze: true,
+      },
+    })
+
+    currentJob.value = response.job
+    selectedTracks.value = new Set()
+    selectAllLibrary.value = false
+  }
+  catch (e) {
+    console.error('Failed to start re-analysis:', e)
+    alert(e.data?.message || 'Failed to start re-analysis')
+  }
+
+  analyzing.value = false
+}
+
+async function deleteSelectedPending() {
+  if (selectedPending.value.size === 0) return
+
+  if (!confirm(`Delete ${selectedPending.value.size} files? This cannot be undone.`)) {
+    return
+  }
+
+  deleting.value = true
+
+  try {
+    await $fetch('/api/library/delete', {
+      method: 'POST',
+      body: { trackIds: Array.from(selectedPending.value) },
+    })
+
+    selectedPending.value = new Set()
+    selectAllPending.value = false
+    await refresh()
+  }
+  catch (e) {
+    console.error('Failed to delete files:', e)
+    alert(e.data?.message || 'Failed to delete files')
+  }
+
+  deleting.value = false
+}
+
+async function handleJobClose() {
+  currentJob.value = null
+  await refresh()
+}
+
+async function handlePublished(result) {
+  showPublishModal.value = false
+  selectedTracks.value = new Set()
+  selectAllLibrary.value = false
+  await refresh()
+
+  if (result.success > 0) {
+    alert(`Published ${result.success} track(s) successfully.${result.errors?.length > 0 ? ` ${result.errors.length} failed.` : ''}`)
+  }
+}
+
+// MusicBrainz linking
+function openMusicBrainzModal(track) {
+  linkingTrack.value = track
+  musicBrainzId.value = track.musicbrainz_id || ''
+  musicBrainzSubmitFingerprint.value = true
+  linkingResult.value = null
+  showMusicBrainzModal.value = true
+}
+
+function closeMusicBrainzModal() {
+  showMusicBrainzModal.value = false
+  linkingTrack.value = null
+  musicBrainzId.value = ''
+  linkingResult.value = null
+  if (linkingResult.value?.success) {
+    refresh()
+  }
+}
+
+async function linkToMusicBrainz() {
+  if (!musicBrainzId.value || !linkingTrack.value) return
+
+  linkingInProgress.value = true
+  linkingResult.value = null
+
+  try {
+    const result = await $fetch('/api/library/link-musicbrainz', {
+      method: 'POST',
+      body: {
+        trackId: linkingTrack.value.id,
+        recordingId: musicBrainzId.value.trim(),
+        submitFingerprint: musicBrainzSubmitFingerprint.value,
+      },
+    })
+
+    linkingResult.value = result
+    if (result.success) {
+      await refresh()
+    }
+  }
+  catch (e) {
+    console.error('Failed to link to MusicBrainz:', e)
+    linkingResult.value = {
+      success: false,
+      error: e.data?.message || 'Failed to link to MusicBrainz',
+    }
+  }
+
+  linkingInProgress.value = false
+}
+
+// Get the single selected track (for MusicBrainz linking)
+const singleSelectedTrack = computed(() => {
+  if (selectedTracks.value.size !== 1) return null
+  const trackId = Array.from(selectedTracks.value)[0]
+  return tracks.value.find(t => t.id === trackId)
+})
 </script>
 
 <style scoped>
@@ -646,7 +1156,8 @@ async function startScan() {
 }
 
 .refresh-btn,
-.scan-btn {
+.scan-btn,
+.scan-downloads-btn {
   padding: 10px 20px;
   background: #333;
   color: #eee;
@@ -661,13 +1172,36 @@ async function startScan() {
   opacity: 0.9;
 }
 
+.scan-downloads-btn {
+  background: #00dc82;
+  color: #1a1a2e;
+  font-weight: 600;
+}
+
+.scan-downloads-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.scan-downloads-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Stats Bar */
 .stats-bar {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
   gap: 24px;
   padding: 16px 24px;
   background: #16213e;
   border-radius: 12px;
+  flex-wrap: wrap;
+}
+
+.stats-info {
+  display: flex;
+  gap: 24px;
 }
 
 .stat {
@@ -691,6 +1225,228 @@ async function startScan() {
   color: #666;
 }
 
+/* Selection Actions in Stats Bar */
+.selection-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.selection-count {
+  color: #aaa;
+  font-size: 0.9rem;
+}
+
+.reanalyze-btn {
+  padding: 8px 16px;
+  background: #9b59b6;
+  color: #fff;
+  font-weight: 500;
+}
+
+.reanalyze-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.reanalyze-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.publish-btn {
+  padding: 8px 16px;
+  background: #3498db;
+  color: #fff;
+  font-weight: 500;
+}
+
+.publish-btn:hover {
+  opacity: 0.9;
+}
+
+/* Pending Section */
+.pending-section {
+  background: #16213e;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #2a2a4a;
+}
+
+.pending-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: #1a1a2e;
+  cursor: pointer;
+  user-select: none;
+}
+
+.pending-header:hover {
+  background: #1f2942;
+}
+
+.pending-header h2 {
+  color: #ffa502;
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.collapse-icon {
+  color: #666;
+  font-size: 1.2rem;
+  width: 20px;
+  text-align: center;
+}
+
+.pending-hint {
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.pending-content {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.selection-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #1a1a2e;
+  border-radius: 8px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.select-all {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #aaa;
+  cursor: pointer;
+}
+
+.select-all input {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.pending-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.analyze-btn {
+  padding: 10px 24px;
+  background: #00dc82;
+  color: #1a1a2e;
+  font-weight: 600;
+}
+
+.analyze-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.analyze-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.delete-btn {
+  padding: 8px 16px;
+  background: #ff4757;
+  color: #fff;
+  font-weight: 500;
+}
+
+.delete-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.delete-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pending-list {
+  display: flex;
+  flex-direction: column;
+  background: #1a1a2e;
+  border-radius: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.pending-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #2a2a4a;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.pending-item:hover {
+  background: rgba(255, 165, 2, 0.1);
+}
+
+.pending-item.selected {
+  background: rgba(255, 165, 2, 0.15);
+}
+
+.pending-item:last-child {
+  border-bottom: none;
+}
+
+.pending-item input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.pending-filename {
+  flex: 1;
+  color: #eee;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pending-source.badge,
+.pending-status.badge {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.pending-source.badge {
+  color: #9b59b6;
+  background: rgba(155, 89, 182, 0.15);
+}
+
+.pending-status.badge.failed {
+  color: #ff4757;
+  background: rgba(255, 71, 87, 0.15);
+}
+
+.pending-status.badge.analyzing {
+  color: #ffa502;
+  background: rgba(255, 165, 2, 0.15);
+}
+
 /* Filters */
 .filters {
   display: flex;
@@ -711,6 +1467,12 @@ async function startScan() {
   border-radius: 8px;
   color: #eee;
   cursor: pointer;
+}
+
+.filter-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  color: #666;
 }
 
 /* View Tabs */
@@ -800,6 +1562,16 @@ async function startScan() {
   padding: 10px 16px;
   border-bottom: 1px solid #2a2a4a;
   gap: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.track-item:hover {
+  background: rgba(155, 89, 182, 0.1);
+}
+
+.track-item.selected {
+  background: rgba(155, 89, 182, 0.15);
 }
 
 .track-item:last-child {
@@ -808,6 +1580,13 @@ async function startScan() {
 
 .track-item.offline {
   opacity: 0.6;
+}
+
+.track-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .track-info {
@@ -896,6 +1675,26 @@ async function startScan() {
 
 .tracks-table tr.offline {
   opacity: 0.6;
+}
+
+.tracks-table tr.selected {
+  background: rgba(155, 89, 182, 0.15);
+}
+
+.tracks-table tr:hover {
+  background: rgba(155, 89, 182, 0.1);
+  cursor: pointer;
+}
+
+.tracks-table .checkbox-col {
+  width: 40px;
+  text-align: center;
+}
+
+.tracks-table .checkbox-col input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
 }
 
 .tracks-table td {
@@ -1100,5 +1899,86 @@ async function startScan() {
   font-size: 0.75rem;
   color: #9b59b6;
   margin-top: 2px;
+}
+
+/* MusicBrainz Button */
+.musicbrainz-btn {
+  padding: 8px 16px;
+  background: #e91e63;
+  color: #fff;
+  font-weight: 500;
+}
+
+.musicbrainz-btn:hover {
+  opacity: 0.9;
+}
+
+/* MusicBrainz Modal */
+.musicbrainz-modal {
+  max-width: 500px;
+}
+
+.musicbrainz-modal .track-preview {
+  color: #aaa;
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  background: #1a1a2e;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.musicbrainz-modal .linking-result {
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.musicbrainz-modal .linking-result.success {
+  background: rgba(0, 220, 130, 0.1);
+  border: 1px solid #00dc82;
+}
+
+.musicbrainz-modal .linking-result.error {
+  background: rgba(255, 71, 87, 0.1);
+  border: 1px solid #ff4757;
+}
+
+.musicbrainz-modal .linking-result p {
+  margin: 0;
+  color: #eee;
+}
+
+.musicbrainz-modal .linking-result small {
+  color: #aaa;
+}
+
+.musicbrainz-modal .fingerprint-note {
+  color: #00dc82 !important;
+}
+
+.musicbrainz-modal .input-hint {
+  display: block;
+  margin-top: 6px;
+  color: #666;
+}
+
+.musicbrainz-modal .input-hint a {
+  color: #e91e63;
+}
+
+.musicbrainz-modal .checkbox-group label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.musicbrainz-modal .link-btn {
+  background: #e91e63;
+  color: #fff;
+}
+
+.musicbrainz-modal .link-btn:hover:not(:disabled) {
+  opacity: 0.9;
 }
 </style>
