@@ -350,9 +350,17 @@ export async function classifyGenre(
     // Return top 10 for debugging purposes
     const topConfidences = genrePredictions.slice(0, 10);
 
+    // Debug output - show top 5 raw predictions
+    console.log('Genre classification results:');
+    topConfidences.slice(0, 5).forEach((p, i) => {
+      console.log(`  ${i + 1}. ${p.genre}: ${(p.confidence * 100).toFixed(1)}%`);
+    });
+    console.log(`Selected genres: ${genres.length > 0 ? genres.join(', ') : '(none)'}`);
+
     return { genres, genreConfidences: topConfidences };
   } catch (error) {
-    console.warn('Genre classification failed:', error);
+    console.error('Genre classification failed:', error);
+    console.error('Error details:', error instanceof Error ? error.stack : String(error));
     return { genres: [], genreConfidences: [] };
   }
 }

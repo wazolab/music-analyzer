@@ -204,6 +204,22 @@ export function parseFilename(filename: string): ParsedFilename {
       return result;
     }
 
+    // Pattern 2b: "Remixer - Artist - Title [Remixer mix]"
+    // If first part appears in brackets at the end, it's likely a remixer prefix to skip
+    const firstPart = parts[0].trim().toLowerCase();
+    const restOfName = parts.slice(1).join(' - ');
+    const bracketMatch = restOfName.match(/\[([^\]]+)\]/);
+    if (bracketMatch) {
+      const bracketContent = bracketMatch[1].toLowerCase();
+      // Check if first part appears in the bracket content (e.g., "SOULCHYLD" in "[SOULCHYLD flip]")
+      if (bracketContent.includes(firstPart) || firstPart.includes(bracketContent.split(/\s+/)[0])) {
+        result.label = parts[0].trim(); // Treat as label/remixer prefix
+        result.artist = parts[1].trim();
+        result.title = parts.slice(2).join(' - ').trim();
+        return result;
+      }
+    }
+
     // Otherwise assume "Artist - Title - Remix" or similar
     result.artist = parts[0].trim();
     result.title = parts.slice(1).join(' - ').trim();

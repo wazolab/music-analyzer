@@ -57,12 +57,63 @@ npm run build
 
 The project includes a Docker Compose setup with a web UI and Soulseek daemon for downloading music.
 
-### Quick Start
+### Quick Start (New Users)
+
+**Option 1: Using the setup script (recommended)**
 
 ```bash
-# Start all services
+# Clone and run setup
+git clone https://github.com/your-username/music-analyzer.git
+cd music-analyzer
+./setup.sh
+
+# Start services
+docker compose up -d
+```
+
+**Option 2: Manual setup**
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/your-username/music-analyzer.git
+cd music-analyzer
+
+# 2. Copy the example environment file
+cp .env.example .env
+
+# 3. (Optional) Edit .env with your Soulseek credentials for auto-login
+# SLSKD_USERNAME=your-username
+# SLSKD_PASSWORD=your-password
+
+# 4. Create required directories
+mkdir -p downloads incomplete music
+
+# 5. Build the analyzer image (REQUIRED - the UI needs this to run analysis)
+docker compose build analyzer
+
+# 6. Start all services
 docker compose up -d
 
+# 7. Access the UI at http://localhost:3000
+# 8. Access Soulseek at http://localhost:5030
+```
+
+### Updating
+
+```bash
+# Pull latest changes
+git pull
+
+# Rebuild images with new code
+docker compose build
+
+# Restart services
+docker compose up -d
+```
+
+### Common Commands
+
+```bash
 # View logs
 docker compose logs -f
 
@@ -70,12 +121,20 @@ docker compose logs -f
 docker compose down
 ```
 
+### Prerequisites
+
+- **Docker** and **Docker Compose** (v2.0+)
+- **Linux** (tested on Ubuntu 22.04+) - macOS may work but external drive detection is Linux-specific
+- At least **4GB RAM** for audio analysis
+- External SSD/drive mounted at `/media/*` for analysis output (optional)
+
 ### Services
 
 | Service | Port | Description |
 |---------|------|-------------|
-| `ui` | 3000 | Web UI for managing the music pipeline |
+| `ui` | 3000 | Web UI for managing playlists and audio analysis |
 | `slskd` | 5030, 5031 | Soulseek daemon for P2P music downloads |
+| `analyzer` | - | Audio analyzer (runs on-demand, not always running) |
 
 ### Environment Variables
 
@@ -419,6 +478,58 @@ node dist/index.js analyze ./music -c 8 -w  # Combined for maximum speed
 | Maximum (`-c 8 -w`) | ~6-8x | 8+ core CPUs, fast storage |
 
 **Note**: Higher concurrency uses more RAM. Reduce `-c` if you encounter memory issues.
+
+## Troubleshooting
+
+### Analysis fails or genre shows "unknown"
+
+```bash
+# Rebuild the analyzer image to get the latest model files
+docker compose build analyzer --no-cache
+```
+
+### External SSD not visible in the UI
+
+The UI looks for external drives mounted at `/media/*`. Make sure your drive is mounted:
+
+```bash
+# Check mounted drives
+ls /media/$USER/
+
+# The drive should appear in the UI dropdown
+```
+
+### Docker permission issues
+
+```bash
+# Add your user to the docker group
+sudo usermod -aG docker $USER
+# Log out and back in for changes to take effect
+```
+
+### Port already in use
+
+```bash
+# Check what's using port 3000
+sudo lsof -i :3000
+
+# Or change the port in docker-compose.yml
+ports:
+  - "3001:3000"  # Use port 3001 instead
+```
+
+### Resetting everything
+
+```bash
+# Stop containers and remove all data
+docker compose down -v
+
+# Remove the database
+rm -f packages/ui/data/*.db
+
+# Start fresh
+docker compose up -d
+```
 
 ## License
 
