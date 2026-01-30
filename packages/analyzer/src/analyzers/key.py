@@ -13,10 +13,15 @@ CAMELOT_WHEEL = {
     ("E", "minor"): "9A",
     ("B", "minor"): "10A",
     ("F#", "minor"): "11A",
+    ("Gb", "minor"): "11A",  # Enharmonic
     ("C#", "minor"): "12A",
+    ("Db", "minor"): "12A",  # Enharmonic
     ("G#", "minor"): "1A",
+    ("Ab", "minor"): "1A",  # Enharmonic
     ("D#", "minor"): "2A",
+    ("Eb", "minor"): "2A",  # Enharmonic
     ("A#", "minor"): "3A",
+    ("Bb", "minor"): "3A",  # Enharmonic
     ("F", "minor"): "4A",
     ("C", "minor"): "5A",
     ("G", "minor"): "6A",
@@ -28,11 +33,17 @@ CAMELOT_WHEEL = {
     ("A", "major"): "11B",
     ("E", "major"): "12B",
     ("B", "major"): "1B",
+    ("Cb", "major"): "1B",  # Enharmonic
     ("F#", "major"): "2B",
+    ("Gb", "major"): "2B",  # Enharmonic
     ("C#", "major"): "3B",
+    ("Db", "major"): "3B",  # Enharmonic
     ("G#", "major"): "4B",
+    ("Ab", "major"): "4B",  # Enharmonic
     ("D#", "major"): "5B",
+    ("Eb", "major"): "5B",  # Enharmonic
     ("A#", "major"): "6B",
+    ("Bb", "major"): "6B",  # Enharmonic
     ("F", "major"): "7B",
 }
 

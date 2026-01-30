@@ -16,4 +16,16 @@ export default defineNuxtConfig({
       stylistic: true,
     },
   },
+
+  vite: {
+    server: {
+      hmr: {
+        // Use client host for HMR WebSocket in Docker
+        clientPort: 3000,
+      },
+      watch: {
+        usePolling: true, // Needed for Docker volume mounts
+      },
+    },
+  },
 })

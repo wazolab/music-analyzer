@@ -16,7 +16,7 @@ const runningJobs = new Map<number, ReturnType<typeof spawn>>()
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
-  const { fileIds } = body as { fileIds: number[] }
+  const { fileIds, forceReanalyze = false } = body as { fileIds: number[], forceReanalyze?: boolean }
 
   if (!fileIds || !Array.isArray(fileIds) || fileIds.length === 0) {
     throw createError({
@@ -57,9 +57,14 @@ export default defineEventHandler(async (event) => {
     'music-analyzer',
     '--write-tags',
     '--convert', // Convert non-FLAC to FLAC for library integrity
-    '--skip-analyzed', // Skip files already processed by analyzer
-    '/input',
   ]
+
+  // Only skip already-analyzed files if not forcing re-analysis
+  if (!forceReanalyze) {
+    args.push('--skip-analyzed')
+  }
+
+  args.push('/input')
 
   console.log(`Starting analysis job ${job.id}: docker ${args.join(' ')}`)
 

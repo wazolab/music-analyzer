@@ -1,7 +1,7 @@
 import { readdir, stat, rename, rmdir } from 'fs/promises'
 import { join, basename, dirname, extname, resolve } from 'path'
 import { existsSync } from 'fs'
-import { getAllDownloadFiles, upsertDownloadFile } from '../../utils/db'
+import { getAllDownloadFiles, upsertDownloadFile, cleanupStaleDownloadFiles } from '../../utils/db'
 import type { DownloadFile } from '../../utils/types'
 
 // Audio file extensions to look for
@@ -152,7 +152,14 @@ export default defineEventHandler(async (): Promise<{
     upsertDownloadFile(file)
   }
 
-  // Return all files from database (includes previously scanned files)
+  // Clean up database entries for files that no longer exist on disk
+  const existingPaths = new Set(scannedFiles.map(f => f.path))
+  const cleaned = cleanupStaleDownloadFiles(existingPaths)
+  if (cleaned > 0) {
+    console.log(`[Downloads] Cleaned up ${cleaned} stale database entries`)
+  }
+
+  // Return all files from database
   const files = getAllDownloadFiles()
 
   return {

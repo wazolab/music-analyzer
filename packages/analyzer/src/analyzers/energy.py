@@ -30,7 +30,10 @@ class EnergyAnalyzer:
 
     MIN_LEVEL = 1
     MAX_LEVEL = 10
-    LOUDNESS_SCALE = 3  # Divisor to convert loudness to 1-10 scale
+
+    # Loudness range for mapping (typical music ranges from -30 to -6 LUFS)
+    LOUDNESS_MIN = -30.0  # Quiet tracks
+    LOUDNESS_MAX = -6.0  # Very loud/compressed tracks
 
     def __init__(self):
         self._loudness = Loudness()
@@ -40,6 +43,7 @@ class EnergyAnalyzer:
         Analyze audio and extract energy level.
 
         Energy is derived from loudness, mapped to a 1-10 scale.
+        Louder tracks = higher energy.
 
         Args:
             audio: Audio data at 44.1kHz
@@ -49,9 +53,11 @@ class EnergyAnalyzer:
         """
         loudness = self._loudness(audio.samples)
 
-        # Convert loudness (negative dB) to 1-10 scale
-        # Louder (less negative) = higher energy
-        raw_level = -loudness / self.LOUDNESS_SCALE
-        level = int(min(self.MAX_LEVEL, max(self.MIN_LEVEL, round(raw_level))))
+        # Map loudness to 1-10 scale
+        # Louder (closer to 0 / less negative) = higher energy
+        # Normalize to 0-1 range, then scale to 1-10
+        normalized = (loudness - self.LOUDNESS_MIN) / (self.LOUDNESS_MAX - self.LOUDNESS_MIN)
+        normalized = max(0.0, min(1.0, normalized))  # Clamp to 0-1
+        level = int(round(normalized * 9 + 1))  # Scale to 1-10
 
         return EnergyResult(level=level, loudness=float(loudness))

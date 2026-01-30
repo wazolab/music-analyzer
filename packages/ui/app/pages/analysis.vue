@@ -78,14 +78,18 @@
           <h2 class="section-title">
             Analyzed ({{ analyzedFiles.length }})
           </h2>
-          <button
+          <div
             v-if="analyzedFiles.length > 0"
-            :disabled="deleting"
-            class="clear-btn"
-            @click="clearAnalyzed"
+            class="section-actions"
           >
-            {{ deleting ? 'Clearing...' : 'Clear all' }}
-          </button>
+            <button
+              :disabled="deleting"
+              class="clear-btn"
+              @click="clearAnalyzed"
+            >
+              {{ deleting ? 'Clearing...' : 'Clear all' }}
+            </button>
+          </div>
         </div>
 
         <div
@@ -94,10 +98,30 @@
         >
           <p>No analyzed files yet</p>
         </div>
-        <div
-          v-else
-          class="genre-grid"
-        >
+        <template v-else>
+          <!-- Selection bar for analyzed files -->
+          <div class="selection-bar analyzed-selection">
+            <label class="select-all">
+              <input
+                v-model="selectAllAnalyzed"
+                type="checkbox"
+                @change="toggleSelectAllAnalyzed"
+              >
+              Select all ({{ selectedAnalyzed.size }}/{{ analyzedFiles.length }})
+            </label>
+            <div class="selection-actions">
+              <button
+                v-if="selectedAnalyzed.size > 0"
+                :disabled="analyzing"
+                class="reanalyze-btn"
+                @click="reanalyzeSelected"
+              >
+                {{ analyzing ? 'Analyzing...' : `Re-analyze ${selectedAnalyzed.size}` }}
+              </button>
+            </div>
+          </div>
+
+          <div class="genre-grid">
           <div
             v-for="group in filesByGenre"
             :key="group.genre"
@@ -112,7 +136,15 @@
                 v-for="file in group.files"
                 :key="file.id"
                 class="genre-file"
+                :class="{ selected: selectedAnalyzed.has(file.id) }"
+                @click="toggleAnalyzedSelect(file.id)"
               >
+                <input
+                  type="checkbox"
+                  class="file-checkbox"
+                  :checked="selectedAnalyzed.has(file.id)"
+                  @click.stop="toggleAnalyzedSelect(file.id)"
+                >
                 <div class="file-info">
                   <span
                     v-if="file.artist && file.title"
@@ -145,6 +177,7 @@
             </div>
           </div>
         </div>
+        </template>
       </section>
     </template>
 
@@ -161,7 +194,9 @@
 useHead({ title: 'Analysis' })
 
 const selectedFiles = ref(new Set())
+const selectedAnalyzed = ref(new Set())
 const selectAll = ref(false)
+const selectAllAnalyzed = ref(false)
 const analyzing = ref(false)
 const deleting = ref(false)
 const currentJob = ref(null)
@@ -306,6 +341,52 @@ async function deleteSelected() {
   deleting.value = false
 }
 
+function toggleAnalyzedSelect(fileId) {
+  if (selectedAnalyzed.value.has(fileId)) {
+    selectedAnalyzed.value.delete(fileId)
+  }
+  else {
+    selectedAnalyzed.value.add(fileId)
+  }
+  selectedAnalyzed.value = new Set(selectedAnalyzed.value)
+  selectAllAnalyzed.value = selectedAnalyzed.value.size === analyzedFiles.value.length
+}
+
+function toggleSelectAllAnalyzed() {
+  if (selectAllAnalyzed.value) {
+    selectedAnalyzed.value = new Set(analyzedFiles.value.map(f => f.id))
+  }
+  else {
+    selectedAnalyzed.value = new Set()
+  }
+}
+
+async function reanalyzeSelected() {
+  if (selectedAnalyzed.value.size === 0) return
+
+  analyzing.value = true
+
+  try {
+    const response = await $fetch('/api/analyze/start', {
+      method: 'POST',
+      body: {
+        fileIds: Array.from(selectedAnalyzed.value),
+        forceReanalyze: true,
+      },
+    })
+
+    currentJob.value = response.job
+    selectedAnalyzed.value = new Set()
+    selectAllAnalyzed.value = false
+  }
+  catch (e) {
+    console.error('Failed to start re-analysis:', e)
+    alert(e.data?.message || 'Failed to start re-analysis')
+  }
+
+  analyzing.value = false
+}
+
 async function clearAnalyzed() {
   const analyzedFiles = files.value.filter(f => f.status === 'completed')
   if (analyzedFiles.length === 0) return
@@ -426,8 +507,9 @@ async function clearAnalyzed() {
 
 .selection-actions {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .analyze-btn {
@@ -460,6 +542,31 @@ async function clearAnalyzed() {
 .delete-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.section-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.reanalyze-btn {
+  padding: 8px 16px;
+  background: #9b59b6;
+  color: #fff;
+  font-weight: 500;
+}
+
+.reanalyze-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.reanalyze-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.analyzed-selection {
+  margin-bottom: 8px;
 }
 
 .clear-btn {
@@ -531,13 +638,29 @@ async function clearAnalyzed() {
   padding: 8px 16px;
   border-bottom: 1px solid #2a2a4a;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.genre-file:hover {
+  background: rgba(155, 89, 182, 0.1);
+}
+
+.genre-file.selected {
+  background: rgba(155, 89, 182, 0.2);
 }
 
 .genre-file:last-child {
   border-bottom: none;
+}
+
+.file-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .file-info {

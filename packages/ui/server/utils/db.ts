@@ -513,4 +513,24 @@ export function deleteDownloadFile(id: number): boolean {
   return result.changes > 0
 }
 
+export function deleteDownloadFileByPath(path: string): boolean {
+  const result = db.prepare('DELETE FROM download_files WHERE path = ?').run(path)
+  return result.changes > 0
+}
+
+export function cleanupStaleDownloadFiles(existingPaths: Set<string>): number {
+  const allFiles = getAllDownloadFiles()
+  let deleted = 0
+
+  for (const file of allFiles) {
+    if (!existingPaths.has(file.path)) {
+      if (deleteDownloadFile(file.id)) {
+        deleted++
+      }
+    }
+  }
+
+  return deleted
+}
+
 export default db
