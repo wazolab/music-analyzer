@@ -4,6 +4,9 @@ services:
       context: ./packages/ui
       dockerfile: Dockerfile
     container_name: music-pipeline-ui
+    user: "${UID:-1000}:${GID:-1000}"
+    group_add:
+      - ${DOCKER_GID:-999}
     ports:
       - "3000:3000"
     volumes:
@@ -16,6 +19,8 @@ services:
       - DATA_DIR=/app/data
       - DOWNLOADS_DIR=/app/downloads
       - HOST_DOWNLOADS_DIR=${DOWNLOADS_DIR:-${PWD}/downloads}
+      - UID=${UID:-1000}
+      - GID=${GID:-1000}
     depends_on:
       - slskd
     restart: unless-stopped
@@ -45,6 +50,7 @@ services:
       context: ./packages/analyzer
       dockerfile: Dockerfile
     image: music-analyzer
+    user: "${UID:-1000}:${GID:-1000}"
     profiles:
       - tools
     volumes:

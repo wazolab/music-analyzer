@@ -50,13 +50,19 @@ export default defineEventHandler(async (event) => {
 
   // Start the analyzer via docker run
   // Mount as read-write to allow tag writing and FLAC conversion
+  // Run as current user to preserve file ownership
+  const uid = process.env.UID || '1000'
+  const gid = process.env.GID || '1000'
+
   const args = [
     'run', '--rm',
+    '--user', `${uid}:${gid}`,
     '--name', `analyzer-job-${job.id}`,
     '-v', `${hostDownloadsDir}:/input`,
     'music-analyzer',
     '--write-tags',
     '--convert', // Convert non-FLAC to FLAC for library integrity
+    '--lookup', // Enable metadata lookup (album, label, year)
   ]
 
   // Only skip already-analyzed files if not forcing re-analysis

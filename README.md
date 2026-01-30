@@ -148,6 +148,13 @@ SLSKD_PASSWORD=your-password
 # Custom directories (optional, defaults to ./downloads and ./music)
 DOWNLOADS_DIR=/path/to/downloads
 MUSIC_DIR=/path/to/music
+
+# User/Group IDs for file permissions (run: id -u && id -g)
+UID=1000
+GID=1000
+
+# Docker group ID for socket access (run: getent group docker | cut -d: -f3)
+DOCKER_GID=999
 ```
 
 Then start the services:
@@ -512,14 +519,29 @@ ports:
   - "3001:3000"  # Use port 3001 instead
 ```
 
+### Database Management
+
+The database is stored in a Docker volume (`ui-data`), not on the local filesystem. Use the provided script to manage database contents:
+
+```bash
+# Show current table counts
+./scripts/clear-db.sh --stats
+
+# Clear specific tables
+./scripts/clear-db.sh --library      # Clear library_tracks only
+./scripts/clear-db.sh --downloads    # Clear download_files only
+./scripts/clear-db.sh --analysis     # Clear analysis_jobs only
+./scripts/clear-db.sh --playlists    # Clear playlists, tracks, preparation list
+
+# Clear all tables
+./scripts/clear-db.sh --all
+```
+
 ### Resetting everything
 
 ```bash
-# Stop containers and remove all data
+# Stop containers and remove all data (including database volume)
 docker compose down -v
-
-# Remove the database
-rm -f packages/ui/data/*.db
 
 # Start fresh
 docker compose up -d

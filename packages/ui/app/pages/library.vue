@@ -235,7 +235,7 @@
               <th>BPM</th>
               <th>Key</th>
               <th>Energy</th>
-              <th>Status</th>
+              <th>Storage</th>
             </tr>
           </thead>
           <tbody>
@@ -268,10 +268,16 @@
                 >E{{ track.energy }}</span>
               </td>
               <td>
+                <template v-if="track.storage_device">
+                  <span
+                    class="status-badge"
+                    :class="track.storage_status"
+                  >{{ track.storage_status }}</span>
+                </template>
                 <span
-                  class="status-badge"
-                  :class="track.storage_status"
-                >{{ track.storage_status }}</span>
+                  v-else
+                  class="no-device"
+                >-</span>
               </td>
             </tr>
           </tbody>
@@ -912,6 +918,10 @@ async function startScan() {
 .status-badge.offline {
   color: #ff4757;
   background: rgba(255, 71, 87, 0.15);
+}
+
+.no-device {
+  color: #555;
 }
 
 /* Modal */
