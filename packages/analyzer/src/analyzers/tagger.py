@@ -6,7 +6,7 @@ from typing import List, Optional
 
 from mutagen.flac import FLAC
 from mutagen.mp3 import MP3
-from mutagen.id3 import ID3, TBPM, TKEY, TCON, TXXX
+from mutagen.id3 import ID3, TBPM, TKEY, TCON, TXXX, TDRC
 
 
 @dataclass
@@ -18,6 +18,7 @@ class TagData:
     genres: Optional[List[str]] = None
     artist: Optional[str] = None
     title: Optional[str] = None
+    year: Optional[int] = None
 
 
 class AudioTagger:
@@ -80,6 +81,10 @@ class AudioTagger:
         if data.genres:
             audio["GENRE"] = self._format_genres(data.genres)
 
+        if data.year is not None:
+            audio["DATE"] = str(data.year)
+            audio["YEAR"] = str(data.year)
+
         audio.save()
         return True
 
@@ -107,6 +112,9 @@ class AudioTagger:
 
         if data.genres:
             tags.add(TCON(encoding=3, text=[self._format_genres(data.genres)]))
+
+        if data.year is not None:
+            tags.add(TDRC(encoding=3, text=[str(data.year)]))
 
         audio.save()
         return True

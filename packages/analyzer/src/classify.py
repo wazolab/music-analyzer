@@ -23,6 +23,7 @@ from analyzers import (
     GenreClassifier,
     AudioTagger,
     TagData,
+    lookup_metadata,
 )
 from utils import parse_filename, find_audio_files
 
@@ -37,6 +38,9 @@ class AnalysisResult:
     key: str
     energy: int
     genres: List[str]
+    album: Optional[str] = None
+    label: Optional[str] = None
+    year: Optional[int] = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -48,9 +52,10 @@ class AnalysisResult:
 class AudioAnalyzer:
     """Main analyzer orchestrating all analysis modules."""
 
-    def __init__(self, verbose: bool = True, write_tags: bool = False):
+    def __init__(self, verbose: bool = True, write_tags: bool = False, metadata_lookup: bool = False):
         self.verbose = verbose
         self.write_tags = write_tags
+        self.metadata_lookup = metadata_lookup
         self.rhythm = RhythmAnalyzer()
         self.key = KeyAnalyzer()
         self.energy = EnergyAnalyzer()
@@ -117,15 +122,48 @@ class AudioAnalyzer:
             bpm = bpm * 2
             self._log(f"Corrected half-time BPM: {rhythm_result.bpm} -> {bpm}")
 
+        # Metadata lookup via AcoustID + MusicBrainz
+        artist = track_info.artist
+        title = track_info.title
+        album = None
+        label = None
+        year = None
+
+        if self.metadata_lookup:
+            self._log("Looking up metadata via AcoustID...")
+            metadata = lookup_metadata(file_path)
+            if metadata.musicbrainz_id:
+                self._log(f"Found match (confidence: {metadata.confidence:.0%})")
+                if metadata.artist:
+                    artist = metadata.artist
+                    self._log(f"  Artist: {artist}")
+                if metadata.title:
+                    title = metadata.title
+                    self._log(f"  Title: {title}")
+                if metadata.album:
+                    album = metadata.album
+                    self._log(f"  Album: {album}")
+                if metadata.label:
+                    label = metadata.label
+                    self._log(f"  Label: {label}")
+                if metadata.year:
+                    year = metadata.year
+                    self._log(f"  Year: {year}")
+            else:
+                self._log("No match found in MusicBrainz")
+
         # Build result
         result = AnalysisResult(
             file=filename,
-            artist=track_info.artist,
-            title=track_info.title,
+            artist=artist,
+            title=title,
             bpm=bpm,
             key=key_result.camelot,
             energy=energy_result.level,
             genres=genre_result.top_genres,
+            album=album,
+            label=label,
+            year=year,
         )
 
         # Write tags to file if enabled
@@ -136,6 +174,7 @@ class AudioAnalyzer:
                 key=result.key,
                 energy=result.energy,
                 genres=result.genres,
+                year=result.year,
             )
             if self.tagger.write(file_path, tag_data):
                 self._log("✔ Tags written successfully")
@@ -211,6 +250,11 @@ def main():
         action="store_true",
         help="Write analysis results to file metadata (for Traktor/Serato)"
     )
+    parser.add_argument(
+        "-l", "--lookup",
+        action="store_true",
+        help="Look up metadata via AcoustID + MusicBrainz (requires ACOUSTID_API_KEY)"
+    )
 
     args = parser.parse_args()
 
@@ -219,7 +263,11 @@ def main():
         return
 
     # Initialize analyzer
-    analyzer = AudioAnalyzer(verbose=not args.quiet, write_tags=args.write_tags)
+    analyzer = AudioAnalyzer(
+        verbose=not args.quiet,
+        write_tags=args.write_tags,
+        metadata_lookup=args.lookup
+    )
     analyzer.load_models()
 
     input_path = Path(args.input)

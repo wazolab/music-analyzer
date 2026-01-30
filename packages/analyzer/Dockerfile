@@ -1,9 +1,10 @@
 # Genre classifier using Essentia's Discogs-Effnet models
 FROM python:3.11-bookworm
 
-# Install ffmpeg for audio decoding
+# Install ffmpeg for audio decoding and chromaprint for fingerprinting
 RUN apt-get update && apt-get install -y \
     ffmpeg \
+    libchromaprint-tools \
     && rm -rf /var/lib/apt/lists/*
 
 # Install essentia with TensorFlow support and mutagen for tag writing
