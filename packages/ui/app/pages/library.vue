@@ -39,7 +39,7 @@
     </div>
 
     <!-- Pending Section -->
-    <UCard v-if="pendingTracks.length > 0" :ui="{ body: 'p-0' }">
+    <UCard v-if="pendingTracks.length > 0" :ui="{ body: showPending ? 'p-0' : 'hidden' }">
       <template #header>
         <button class="flex w-full justify-between items-center" @click="showPending = !showPending">
           <div class="flex items-center gap-2">
@@ -131,41 +131,99 @@
         <p v-else class="text-muted">No tracks match your filters.</p>
       </UCard>
 
-      <!-- Grid View -->
-      <div v-else-if="viewMode !== 'list'" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        <UCard v-for="group in groupedTracks" :key="group.name" :ui="{ body: 'p-0' }">
-          <template #header>
-            <div class="flex justify-between items-center">
-              <span class="font-semibold">{{ group.name || 'Unknown' }}</span>
-              <UBadge color="neutral" variant="subtle">{{ group.tracks.length }}</UBadge>
-            </div>
-          </template>
-          <div class="max-h-72 overflow-y-auto divide-y divide-default">
-            <div
-              v-for="track in group.tracks"
-              :key="track.id"
-              class="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-elevated/50"
-              :class="{ 'opacity-60': track.storage_status === 'offline', 'bg-elevated': selectedTracks.has(track.id) }"
-              @click="toggleTrackSelect(track.id)"
+      <!-- Grid View - Group Cards -->
+      <template v-else-if="viewMode !== 'list'">
+        <!-- Group Detail View (when a group is selected) -->
+        <div v-if="selectedGroup" class="space-y-4">
+          <div class="flex items-center gap-3">
+            <UButton
+              icon="i-lucide-arrow-left"
+              variant="ghost"
+              color="neutral"
+              @click="selectedGroup = null"
             >
-              <UCheckbox :model-value="selectedTracks.has(track.id)" @click.stop @update:model-value="toggleTrackSelect(track.id)" />
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-1.5 truncate">
-                  <UIcon v-if="track.storage_status === 'offline'" name="i-lucide-cloud-off" class="size-4 text-error shrink-0" />
-                  <UIcon v-if="!track.musicbrainz_id" name="i-lucide-help-circle" class="size-4 text-warning shrink-0" />
-                  <span class="truncate">{{ track.artist || 'Unknown' }} - {{ track.title || 'Unknown' }}</span>
-                </div>
-                <div v-if="track.album" class="text-sm text-muted truncate">{{ track.album }}</div>
-              </div>
-              <div class="flex gap-1.5 shrink-0">
-                <UBadge v-if="track.bpm" color="warning" variant="subtle">{{ Math.round(track.bpm) }} BPM</UBadge>
-                <UBadge v-if="track.key_notation" color="primary" variant="subtle">{{ track.key_notation }}</UBadge>
-                <UBadge v-if="track.energy" color="info" variant="subtle">E{{ track.energy }}</UBadge>
-              </div>
-            </div>
+              Back
+            </UButton>
+            <h2 class="text-xl font-semibold">{{ selectedGroup }}</h2>
+            <UBadge color="neutral" variant="subtle">{{ selectedGroupTracks.length }} tracks</UBadge>
           </div>
-        </UCard>
-      </div>
+
+          <UCard :ui="{ body: 'p-0' }">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="border-b border-default bg-elevated/50">
+                  <tr>
+                    <th class="px-4 py-3 text-left font-medium">
+                      <UCheckbox :model-value="selectAllLibrary" @update:model-value="toggleSelectAllLibrary" />
+                    </th>
+                    <th class="px-4 py-3 text-left font-medium">Artist</th>
+                    <th class="px-4 py-3 text-left font-medium">Title</th>
+                    <th class="px-4 py-3 text-left font-medium">Album</th>
+                    <th class="px-4 py-3 text-left font-medium">Label</th>
+                    <th class="px-4 py-3 text-left font-medium">Year</th>
+                    <th class="px-4 py-3 text-left font-medium">BPM</th>
+                    <th class="px-4 py-3 text-left font-medium">Key</th>
+                    <th class="px-4 py-3 text-left font-medium">Energy</th>
+                    <th class="px-4 py-3 text-left font-medium">Storage</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-default">
+                  <tr
+                    v-for="row in selectedGroupTracks"
+                    :key="row.id"
+                    class="cursor-pointer hover:bg-elevated/50"
+                    :class="{ 'bg-elevated': selectedTracks.has(row.id) }"
+                    @click="toggleTrackSelect(row.id)"
+                  >
+                    <td class="px-4 py-3">
+                      <UCheckbox :model-value="selectedTracks.has(row.id)" @click.stop @update:model-value="toggleTrackSelect(row.id)" />
+                    </td>
+                    <td class="px-4 py-3">
+                      <div class="flex items-center gap-1">
+                        <UIcon v-if="!row.musicbrainz_id" name="i-lucide-help-circle" class="size-3.5 text-warning shrink-0" />
+                        <span>{{ row.artist || '-' }}</span>
+                      </div>
+                    </td>
+                    <td class="px-4 py-3">{{ row.title || '-' }}</td>
+                    <td class="px-4 py-3">{{ row.album || '-' }}</td>
+                    <td class="px-4 py-3">{{ row.label || '-' }}</td>
+                    <td class="px-4 py-3">{{ row.year || '-' }}</td>
+                    <td class="px-4 py-3">
+                      <UBadge v-if="row.bpm" color="warning" variant="subtle">{{ Math.round(row.bpm) }}</UBadge>
+                    </td>
+                    <td class="px-4 py-3">
+                      <UBadge v-if="row.key_notation" color="primary" variant="subtle">{{ row.key_notation }}</UBadge>
+                    </td>
+                    <td class="px-4 py-3">
+                      <UBadge v-if="row.energy" color="info" variant="subtle">E{{ row.energy }}</UBadge>
+                    </td>
+                    <td class="px-4 py-3">
+                      <UBadge v-if="row.storage_device" :color="row.storage_status === 'offline' ? 'error' : 'success'" variant="subtle" size="xs">
+                        {{ row.storage_status }}
+                      </UBadge>
+                      <span v-else class="text-muted">-</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </UCard>
+        </div>
+
+        <!-- Group Cards Grid -->
+        <div v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+          <UCard
+            v-for="group in groupedTracks"
+            :key="group.name"
+            class="cursor-pointer transition-all hover:ring-2 hover:ring-primary"
+            :ui="{ body: 'p-4 text-center' }"
+            @click="selectedGroup = group.name"
+          >
+            <div class="text-3xl font-bold text-primary mb-1">{{ group.tracks.length }}</div>
+            <div class="text-sm text-muted truncate" :title="group.name || 'Unknown'">{{ group.name || 'Unknown' }}</div>
+          </UCard>
+        </div>
+      </template>
 
       <!-- List View -->
       <UCard v-else :ui="{ body: 'p-0' }">
@@ -364,6 +422,7 @@ useHead({ title: 'Library' })
 
 const refreshing = ref(false)
 const viewMode = ref('genre')
+const selectedGroup = ref(null)
 const searchQuery = ref('')
 const filterGenre = ref('')
 const filterLabel = ref('')
@@ -377,18 +436,16 @@ const viewTabs = [
   { label: 'List', value: 'list' },
 ]
 
-const tableColumns = [
-  { key: 'select', label: '' },
-  { key: 'artist', label: 'Artist' },
-  { key: 'title', label: 'Title' },
-  { key: 'album', label: 'Album' },
-  { key: 'label', label: 'Label' },
-  { key: 'year', label: 'Year' },
-  { key: 'bpm', label: 'BPM' },
-  { key: 'key_notation', label: 'Key' },
-  { key: 'energy', label: 'Energy' },
-  { key: 'storage_status', label: 'Storage' },
-]
+// Clear selected group when view mode changes
+watch(viewMode, () => {
+  selectedGroup.value = null
+})
+
+const selectedGroupTracks = computed(() => {
+  if (!selectedGroup.value) return []
+  const group = groupedTracks.value.find(g => g.name === selectedGroup.value)
+  return group?.tracks || []
+})
 
 const showScanModal = ref(false)
 const scanPath = ref('')
@@ -400,7 +457,7 @@ const volumes = ref([])
 const loadingVolumes = ref(false)
 const scanningDownloads = ref(false)
 
-const showPending = ref(true)
+const showPending = ref(false)
 const selectedPending = ref(new Set())
 const selectAllPending = ref(false)
 
