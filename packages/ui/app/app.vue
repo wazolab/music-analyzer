@@ -14,9 +14,9 @@
           <span class="nav-icon">🎧</span>
           <span>DJ Prep</span>
         </NuxtLink>
-        <NuxtLink to="/downloads" class="nav-item" :class="{ active: route.path === '/downloads' }">
-          <span class="nav-icon">📂</span>
-          <span>Downloads</span>
+        <NuxtLink to="/analysis" class="nav-item" :class="{ active: route.path === '/analysis' }">
+          <span class="nav-icon">🎵</span>
+          <span>Analysis</span>
         </NuxtLink>
       </nav>
 

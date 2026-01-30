@@ -1,5 +1,5 @@
 <template>
-  <div class="file-row" :class="{ selected, [file.status]: true }">
+  <div class="file-row" :class="{ selected }">
     <input
       type="checkbox"
       :checked="selected"
@@ -7,10 +7,8 @@
       class="file-checkbox"
     >
     <span class="file-name">{{ file.filename }}</span>
+    <span v-if="topGenre" class="file-genre">{{ topGenre }}</span>
     <span class="file-size">{{ formatSize(file.size_bytes) }}</span>
-    <span v-if="file.bpm" class="file-bpm">{{ Math.round(file.bpm) }} BPM</span>
-    <span v-if="file.key_notation" class="file-key">{{ file.key_notation }}</span>
-    <span class="file-status" :class="file.status">{{ statusLabel }}</span>
   </div>
 </template>
 
@@ -28,16 +26,26 @@ const props = defineProps({
 
 defineEmits(['toggle-select'])
 
-const statusLabel = computed(() => {
-  switch (props.file.status) {
-    case 'pending': return 'Pending'
-    case 'queued': return 'Queued'
-    case 'analyzing': return 'Analyzing...'
-    case 'completed': return 'Done'
-    case 'failed': return 'Failed'
-    default: return props.file.status
+// Parse genres and get the top one (simplified)
+const topGenre = computed(() => {
+  if (!props.file.genres) return null
+  try {
+    let genres = props.file.genres
+    if (typeof genres === 'string') {
+      genres = JSON.parse(genres)
+    }
+    if (!Array.isArray(genres) || genres.length === 0) return null
+    // Simplify genre (e.g., "Hip Hop---Boom Bap" -> "Boom Bap")
+    const genre = genres[0]
+    if (genre.includes('---')) {
+      return genre.split('---')[1]
+    }
+    return genre
+  } catch {
+    return null
   }
 })
+
 
 function formatSize(bytes) {
   if (!bytes) return ''
@@ -69,10 +77,6 @@ function formatSize(bytes) {
   background: rgba(0, 220, 130, 0.1);
 }
 
-.file-row.completed {
-  opacity: 0.7;
-}
-
 .file-checkbox {
   width: 18px;
   height: 18px;
@@ -88,61 +92,22 @@ function formatSize(bytes) {
   text-overflow: ellipsis;
 }
 
+.file-genre {
+  color: #9b59b6;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  background: rgba(155, 89, 182, 0.15);
+  border-radius: 4px;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .file-size {
   color: #666;
   font-size: 0.85rem;
   min-width: 70px;
   text-align: right;
-}
-
-.file-bpm {
-  color: #ffa502;
-  font-size: 0.8rem;
-  padding: 2px 6px;
-  background: rgba(255, 165, 2, 0.15);
-  border-radius: 4px;
-}
-
-.file-key {
-  color: #00dc82;
-  font-size: 0.8rem;
-  padding: 2px 6px;
-  background: rgba(0, 220, 130, 0.15);
-  border-radius: 4px;
-  min-width: 30px;
-  text-align: center;
-}
-
-.file-status {
-  font-size: 0.8rem;
-  padding: 2px 8px;
-  border-radius: 4px;
-  min-width: 70px;
-  text-align: center;
-}
-
-.file-status.pending {
-  color: #666;
-  background: #333;
-}
-
-.file-status.queued {
-  color: #ffa502;
-  background: rgba(255, 165, 2, 0.15);
-}
-
-.file-status.analyzing {
-  color: #3498db;
-  background: rgba(52, 152, 219, 0.15);
-}
-
-.file-status.completed {
-  color: #00dc82;
-  background: rgba(0, 220, 130, 0.15);
-}
-
-.file-status.failed {
-  color: #ff4757;
-  background: rgba(255, 71, 87, 0.15);
 }
 </style>

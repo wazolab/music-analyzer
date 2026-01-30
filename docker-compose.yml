@@ -21,6 +21,7 @@ services:
   slskd:
     image: slskd/slskd:latest
     container_name: music-pipeline-slskd
+    user: "${UID:-1000}:${GID:-1000}"
     command: ["--no-auth"]
     ports:
       - "5030:5030"

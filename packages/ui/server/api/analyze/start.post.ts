@@ -147,17 +147,32 @@ export default defineEventHandler(async (event) => {
       }
 
       // Try to parse JSON output for analysis results
-      // Format: __RESULT__: {"artist": "...", "title": "...", "genres": [...]}
+      // Format: __RESULT__: {"artist": "...", "title": "...", "genres": [...], "file": "..."}
       if (line.includes('__RESULT__:')) {
         try {
           const jsonStr = line.split('__RESULT__:')[1].trim()
           const result = JSON.parse(jsonStr)
-          if (result.artist && result.title && result.genres) {
-            const updated = matchAndUpdateTrackAnalysis(result.artist, result.title, {
-              tags: result.genres
-            })
-            if (updated > 0) {
-              console.log(`[Job ${job.id}] Updated ${updated} track(s): ${result.artist} - ${result.title}`)
+          if (result.genres) {
+            // Update download_file by matching filename
+            if (result.file) {
+              const downloadFile = files.find(f => f?.filename === result.file)
+              if (downloadFile) {
+                updateDownloadFileAnalysis(downloadFile.id, {
+                  genres: result.genres,
+                  artist: result.artist,
+                  title: result.title
+                })
+                console.log(`[Job ${job.id}] Updated download file: ${result.file} -> ${result.genres[0]}`)
+              }
+            }
+            // Also update matching tracks in playlists
+            if (result.artist && result.title) {
+              const updated = matchAndUpdateTrackAnalysis(result.artist, result.title, {
+                tags: result.genres
+              })
+              if (updated > 0) {
+                console.log(`[Job ${job.id}] Updated ${updated} track(s): ${result.artist} - ${result.title}`)
+              }
             }
           }
         } catch (e) {
