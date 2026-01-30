@@ -131,7 +131,7 @@ class AudioAnalyzer:
 
         if self.metadata_lookup:
             self._log("Looking up metadata via AcoustID...")
-            metadata = lookup_metadata(file_path)
+            metadata = lookup_metadata(file_path, hint_artist=track_info.artist, hint_title=track_info.title)
             if metadata.musicbrainz_id:
                 self._log(f"Found match (confidence: {metadata.confidence:.0%})")
                 if metadata.artist:

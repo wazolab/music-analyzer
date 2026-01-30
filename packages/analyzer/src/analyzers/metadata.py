@@ -1,9 +1,10 @@
 """Metadata lookup via AcoustID fingerprinting and MusicBrainz."""
 
 import os
+import re
 import subprocess
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import Optional, List, Tuple
 import json
 import urllib.request
 import urllib.parse
@@ -20,6 +21,43 @@ class MetadataResult:
     year: Optional[int] = None
     musicbrainz_id: Optional[str] = None
     confidence: float = 0.0
+
+
+def normalize_text(text: str) -> str:
+    """Normalize text for comparison: lowercase, remove punctuation, extra spaces."""
+    if not text:
+        return ""
+    # Lowercase
+    text = text.lower()
+    # Remove common suffixes like (remix), (feat. X), etc.
+    text = re.sub(r'\s*\([^)]*\)', '', text)
+    text = re.sub(r'\s*\[[^\]]*\]', '', text)
+    # Remove punctuation
+    text = re.sub(r'[^\w\s]', ' ', text)
+    # Collapse whitespace
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+
+def text_similarity(a: str, b: str) -> float:
+    """Calculate similarity between two strings (0.0 to 1.0)."""
+    a_norm = normalize_text(a)
+    b_norm = normalize_text(b)
+
+    if not a_norm or not b_norm:
+        return 0.0
+
+    # Word-based Jaccard similarity
+    words_a = set(a_norm.split())
+    words_b = set(b_norm.split())
+
+    if not words_a or not words_b:
+        return 0.0
+
+    intersection = words_a & words_b
+    union = words_a | words_b
+
+    return len(intersection) / len(union)
 
 
 class MetadataLookup:
@@ -43,12 +81,19 @@ class MetadataLookup:
                 "or get a free key at https://acoustid.org/api-key"
             )
 
-    def lookup(self, file_path: str) -> MetadataResult:
+    def lookup(
+        self,
+        file_path: str,
+        hint_artist: Optional[str] = None,
+        hint_title: Optional[str] = None
+    ) -> MetadataResult:
         """
         Look up metadata for an audio file.
 
         Args:
             file_path: Path to audio file
+            hint_artist: Artist name from filename (for better matching)
+            hint_title: Title from filename (for better matching)
 
         Returns:
             MetadataResult with track metadata
@@ -58,8 +103,13 @@ class MetadataLookup:
         if not fingerprint:
             return MetadataResult()
 
-        # Query AcoustID
-        recording_id, confidence = self._query_acoustid(fingerprint, duration)
+        # Query AcoustID - get all recordings
+        recordings, confidence = self._query_acoustid(fingerprint, duration)
+        if not recordings:
+            return MetadataResult()
+
+        # Find best matching recording based on filename hints
+        recording_id = self._find_best_recording(recordings, hint_artist, hint_title)
         if not recording_id:
             return MetadataResult()
 
@@ -69,6 +119,46 @@ class MetadataLookup:
         result.musicbrainz_id = recording_id
 
         return result
+
+    def _find_best_recording(
+        self,
+        recordings: List[dict],
+        hint_artist: Optional[str],
+        hint_title: Optional[str]
+    ) -> Optional[str]:
+        """Find the recording that best matches the filename hints."""
+        if not recordings:
+            return None
+
+        # If no hints, return first recording
+        if not hint_artist and not hint_title:
+            return recordings[0].get("id")
+
+        best_score = -1.0
+        best_id = recordings[0].get("id")
+
+        for rec in recordings:
+            rec_id = rec.get("id")
+            rec_title = rec.get("title", "")
+
+            # Get artist names from the recording
+            rec_artists = []
+            for artist in rec.get("artists", []):
+                rec_artists.append(artist.get("name", ""))
+            rec_artist = " ".join(rec_artists)
+
+            # Calculate similarity scores
+            title_sim = text_similarity(hint_title or "", rec_title) if hint_title else 0.5
+            artist_sim = text_similarity(hint_artist or "", rec_artist) if hint_artist else 0.5
+
+            # Combined score (title is more important)
+            score = (title_sim * 0.6) + (artist_sim * 0.4)
+
+            if score > best_score:
+                best_score = score
+                best_id = rec_id
+
+        return best_id
 
     def _get_fingerprint(self, file_path: str) -> tuple[Optional[str], Optional[int]]:
         """Generate audio fingerprint using fpcalc (Chromaprint)."""
@@ -96,8 +186,8 @@ class MetadataLookup:
             print(f"Fingerprint error: {e}")
             return None, None
 
-    def _query_acoustid(self, fingerprint: str, duration: int) -> tuple[Optional[str], float]:
-        """Query AcoustID API to get MusicBrainz Recording ID."""
+    def _query_acoustid(self, fingerprint: str, duration: int) -> Tuple[List[dict], float]:
+        """Query AcoustID API to get all MusicBrainz Recording matches."""
         params = {
             "client": self.api_key,
             "fingerprint": fingerprint,
@@ -114,26 +204,22 @@ class MetadataLookup:
 
             if data.get("status") != "ok":
                 print(f"AcoustID error: {data.get('error', {}).get('message', 'Unknown error')}")
-                return None, 0.0
+                return [], 0.0
 
             results = data.get("results", [])
             if not results:
-                return None, 0.0
+                return [], 0.0
 
             # Get best match
             best = results[0]
             confidence = best.get("score", 0.0)
 
             recordings = best.get("recordings", [])
-            if not recordings:
-                return None, confidence
-
-            # Return first recording ID
-            return recordings[0].get("id"), confidence
+            return recordings, confidence
 
         except Exception as e:
             print(f"AcoustID query error: {e}")
-            return None, 0.0
+            return [], 0.0
 
     def _get_release_label(self, release_id: str) -> Optional[str]:
         """Query MusicBrainz for release label info."""
@@ -240,12 +326,19 @@ class MetadataLookup:
             return MetadataResult()
 
 
-def lookup_metadata(file_path: str, api_key: Optional[str] = None) -> MetadataResult:
+def lookup_metadata(
+    file_path: str,
+    hint_artist: Optional[str] = None,
+    hint_title: Optional[str] = None,
+    api_key: Optional[str] = None
+) -> MetadataResult:
     """
     Convenience function to look up metadata for a file.
 
     Args:
         file_path: Path to audio file
+        hint_artist: Artist name from filename (for better matching)
+        hint_title: Title from filename (for better matching)
         api_key: AcoustID API key (optional, uses env var if not provided)
 
     Returns:
@@ -253,7 +346,7 @@ def lookup_metadata(file_path: str, api_key: Optional[str] = None) -> MetadataRe
     """
     try:
         lookup = MetadataLookup(api_key)
-        return lookup.lookup(file_path)
+        return lookup.lookup(file_path, hint_artist, hint_title)
     except ValueError as e:
         print(f"Metadata lookup disabled: {e}")
         return MetadataResult()
