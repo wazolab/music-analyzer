@@ -98,18 +98,18 @@ class MetadataLookup:
         Returns:
             MetadataResult with track metadata
         """
-        # Generate fingerprint
+        # Generate fingerprint (also gives us exact duration)
         fingerprint, duration = self._get_fingerprint(file_path)
         if not fingerprint:
             return MetadataResult()
 
-        # Query AcoustID - get all recordings
+        # Query AcoustID - get all recordings with duration info
         recordings, confidence = self._query_acoustid(fingerprint, duration)
         if not recordings:
             return MetadataResult()
 
-        # Find best matching recording based on filename hints
-        recording_id = self._find_best_recording(recordings, hint_artist, hint_title)
+        # Find best matching recording using duration (primary) and filename hints (secondary)
+        recording_id = self._find_best_recording(recordings, duration, hint_artist, hint_title)
         if not recording_id:
             return MetadataResult()
 
@@ -123,16 +123,17 @@ class MetadataLookup:
     def _find_best_recording(
         self,
         recordings: List[dict],
+        file_duration: int,
         hint_artist: Optional[str],
         hint_title: Optional[str]
     ) -> Optional[str]:
-        """Find the recording that best matches the filename hints."""
+        """
+        Find the recording that best matches using:
+        1. Duration (primary) - from audio analysis, objective
+        2. Filename hints (secondary) - as tiebreaker
+        """
         if not recordings:
             return None
-
-        # If no hints, return first recording
-        if not hint_artist and not hint_title:
-            return recordings[0].get("id")
 
         best_score = -1.0
         best_id = recordings[0].get("id")
@@ -140,6 +141,7 @@ class MetadataLookup:
         for rec in recordings:
             rec_id = rec.get("id")
             rec_title = rec.get("title", "")
+            rec_duration = rec.get("duration", 0)  # Duration in seconds from AcoustID
 
             # Get artist names from the recording
             rec_artists = []
@@ -147,12 +149,29 @@ class MetadataLookup:
                 rec_artists.append(artist.get("name", ""))
             rec_artist = " ".join(rec_artists)
 
-            # Calculate similarity scores
+            # Duration score (0.0 to 1.0) - penalize recordings with different duration
+            # Allow 5 seconds tolerance, then linear decrease
+            if rec_duration > 0 and file_duration > 0:
+                duration_diff = abs(rec_duration - file_duration)
+                if duration_diff <= 5:
+                    duration_score = 1.0
+                elif duration_diff <= 30:
+                    # Linear decrease from 1.0 to 0.5 over 25 seconds
+                    duration_score = 1.0 - (duration_diff - 5) * 0.02
+                else:
+                    # Significantly different duration - likely a remix/edit
+                    duration_score = max(0.0, 0.5 - (duration_diff - 30) * 0.01)
+            else:
+                # No duration info available
+                duration_score = 0.5
+
+            # Text similarity scores (as tiebreaker)
             title_sim = text_similarity(hint_title or "", rec_title) if hint_title else 0.5
             artist_sim = text_similarity(hint_artist or "", rec_artist) if hint_artist else 0.5
+            text_score = (title_sim * 0.6) + (artist_sim * 0.4)
 
-            # Combined score (title is more important)
-            score = (title_sim * 0.6) + (artist_sim * 0.4)
+            # Combined score: duration is primary (70%), text is secondary (30%)
+            score = (duration_score * 0.7) + (text_score * 0.3)
 
             if score > best_score:
                 best_score = score
@@ -187,11 +206,12 @@ class MetadataLookup:
             return None, None
 
     def _query_acoustid(self, fingerprint: str, duration: int) -> Tuple[List[dict], float]:
-        """Query AcoustID API to get all MusicBrainz Recording matches."""
+        """Query AcoustID API to get all MusicBrainz Recording matches with metadata."""
         params = {
             "client": self.api_key,
             "fingerprint": fingerprint,
             "duration": str(duration),
+            # Request recordings with full metadata for better matching
             "meta": "recordings"
         }
 
