@@ -6,6 +6,9 @@ import type { Playlist, Track, TrackStatus, TrackInput, PrepTrack } from './type
 // Analysis job operations
 import type { AnalysisJob, DownloadFile, DownloadFileStatus, AnalysisJobStatus } from './types'
 
+// Library operations
+import type { LibraryTrack, LibraryTrackInput, LibraryFilters, StorageStatus } from './types'
+
 // Use DATA_DIR env var, or /app/data in Docker, otherwise cwd
 const dataDir = process.env.DATA_DIR || (process.env.NODE_ENV === 'production' ? '/app/data' : process.cwd())
 if (!existsSync(dataDir)) {
@@ -138,6 +141,70 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_download_files_status ON download_files(status);
   CREATE INDEX IF NOT EXISTS idx_download_files_job ON download_files(job_id);
 `)
+
+// Library tracks table for permanent collection
+db.exec(`
+  CREATE TABLE IF NOT EXISTS library_tracks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fingerprint TEXT UNIQUE NOT NULL,
+    fingerprint_duration INTEGER NOT NULL,
+    artist TEXT,
+    title TEXT,
+    album TEXT,
+    label TEXT,
+    year INTEGER,
+    bpm REAL,
+    key_notation TEXT,
+    energy INTEGER,
+    genres TEXT,
+    file_path TEXT,
+    file_size_bytes INTEGER,
+    storage_status TEXT DEFAULT 'available',
+    storage_device TEXT,
+    musicbrainz_id TEXT,
+    first_seen_at TEXT DEFAULT (datetime('now')),
+    last_analyzed_at TEXT,
+    last_seen_at TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_library_fingerprint ON library_tracks(fingerprint);
+  CREATE INDEX IF NOT EXISTS idx_library_genres ON library_tracks(genres);
+  CREATE INDEX IF NOT EXISTS idx_library_label ON library_tracks(label);
+  CREATE INDEX IF NOT EXISTS idx_library_year ON library_tracks(year);
+  CREATE INDEX IF NOT EXISTS idx_library_storage ON library_tracks(storage_status);
+`)
+
+// Migration: add fingerprint columns to download_files
+try {
+  db.exec('ALTER TABLE download_files ADD COLUMN fingerprint TEXT')
+}
+catch (e) {
+  // Column already exists
+}
+try {
+  db.exec('ALTER TABLE download_files ADD COLUMN fingerprint_duration INTEGER')
+}
+catch (e) {
+  // Column already exists
+}
+try {
+  db.exec('ALTER TABLE download_files ADD COLUMN label TEXT')
+}
+catch (e) {
+  // Column already exists
+}
+try {
+  db.exec('ALTER TABLE download_files ADD COLUMN year INTEGER')
+}
+catch (e) {
+  // Column already exists
+}
+try {
+  db.exec('ALTER TABLE download_files ADD COLUMN album TEXT')
+}
+catch (e) {
+  // Column already exists
+}
 
 // Playlist operations
 export function getAllPlaylists(): Playlist[] {
@@ -484,6 +551,11 @@ export function updateDownloadFileAnalysis(id: number, data: {
   genres?: string[]
   artist?: string
   title?: string
+  album?: string
+  label?: string
+  year?: number
+  fingerprint?: string
+  fingerprint_duration?: number
 }): void {
   const updates: string[] = []
   const values: any[] = []
@@ -494,6 +566,11 @@ export function updateDownloadFileAnalysis(id: number, data: {
   if (data.genres !== undefined) { updates.push('genres = ?'); values.push(JSON.stringify(data.genres)) }
   if (data.artist !== undefined) { updates.push('artist = ?'); values.push(data.artist) }
   if (data.title !== undefined) { updates.push('title = ?'); values.push(data.title) }
+  if (data.album !== undefined) { updates.push('album = ?'); values.push(data.album) }
+  if (data.label !== undefined) { updates.push('label = ?'); values.push(data.label) }
+  if (data.year !== undefined) { updates.push('year = ?'); values.push(data.year) }
+  if (data.fingerprint !== undefined) { updates.push('fingerprint = ?'); values.push(data.fingerprint) }
+  if (data.fingerprint_duration !== undefined) { updates.push('fingerprint_duration = ?'); values.push(data.fingerprint_duration) }
 
   if (updates.length === 0) return
 
@@ -531,6 +608,189 @@ export function cleanupStaleDownloadFiles(existingPaths: Set<string>): number {
   }
 
   return deleted
+}
+
+// Library operations
+export function upsertLibraryTrack(data: LibraryTrackInput): LibraryTrack {
+  const existing = getLibraryTrackByFingerprint(data.fingerprint)
+
+  if (existing) {
+    // Update existing record
+    const updates: string[] = []
+    const values: any[] = []
+
+    if (data.artist !== undefined) { updates.push('artist = ?'); values.push(data.artist) }
+    if (data.title !== undefined) { updates.push('title = ?'); values.push(data.title) }
+    if (data.album !== undefined) { updates.push('album = ?'); values.push(data.album) }
+    if (data.label !== undefined) { updates.push('label = ?'); values.push(data.label) }
+    if (data.year !== undefined) { updates.push('year = ?'); values.push(data.year) }
+    if (data.bpm !== undefined) { updates.push('bpm = ?'); values.push(data.bpm) }
+    if (data.key_notation !== undefined) { updates.push('key_notation = ?'); values.push(data.key_notation) }
+    if (data.energy !== undefined) { updates.push('energy = ?'); values.push(data.energy) }
+    if (data.genres !== undefined) { updates.push('genres = ?'); values.push(JSON.stringify(data.genres)) }
+    if (data.file_path !== undefined) { updates.push('file_path = ?'); values.push(data.file_path) }
+    if (data.file_size_bytes !== undefined) { updates.push('file_size_bytes = ?'); values.push(data.file_size_bytes) }
+    if (data.storage_device !== undefined) { updates.push('storage_device = ?'); values.push(data.storage_device) }
+    if (data.musicbrainz_id !== undefined) { updates.push('musicbrainz_id = ?'); values.push(data.musicbrainz_id) }
+
+    updates.push('last_analyzed_at = datetime(\'now\')')
+    updates.push('last_seen_at = datetime(\'now\')')
+    updates.push('storage_status = \'available\'')
+    values.push(existing.id)
+
+    if (updates.length > 3) {
+      db.prepare(`UPDATE library_tracks SET ${updates.join(', ')} WHERE id = ?`).run(...values)
+    }
+
+    return getLibraryTrackById(existing.id)!
+  }
+
+  // Insert new record
+  const result = db.prepare(`
+    INSERT INTO library_tracks (
+      fingerprint, fingerprint_duration, artist, title, album, label, year,
+      bpm, key_notation, energy, genres, file_path, file_size_bytes,
+      storage_device, musicbrainz_id, last_analyzed_at, last_seen_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+  `).run(
+    data.fingerprint,
+    data.fingerprint_duration,
+    data.artist ?? null,
+    data.title ?? null,
+    data.album ?? null,
+    data.label ?? null,
+    data.year ?? null,
+    data.bpm ?? null,
+    data.key_notation ?? null,
+    data.energy ?? null,
+    data.genres ? JSON.stringify(data.genres) : null,
+    data.file_path ?? null,
+    data.file_size_bytes ?? null,
+    data.storage_device ?? null,
+    data.musicbrainz_id ?? null,
+  )
+
+  return getLibraryTrackById(result.lastInsertRowid as number)!
+}
+
+export function getLibraryTrackById(id: number): LibraryTrack | undefined {
+  return db.prepare('SELECT * FROM library_tracks WHERE id = ?').get(id) as LibraryTrack | undefined
+}
+
+export function getLibraryTrackByFingerprint(fingerprint: string): LibraryTrack | undefined {
+  return db.prepare('SELECT * FROM library_tracks WHERE fingerprint = ?').get(fingerprint) as LibraryTrack | undefined
+}
+
+export function getAllLibraryTracks(filters?: LibraryFilters): LibraryTrack[] {
+  let query = 'SELECT * FROM library_tracks WHERE 1=1'
+  const params: any[] = []
+
+  if (filters) {
+    if (filters.genre) {
+      query += ' AND genres LIKE ?'
+      params.push(`%${filters.genre}%`)
+    }
+    if (filters.label) {
+      query += ' AND label = ?'
+      params.push(filters.label)
+    }
+    if (filters.year) {
+      query += ' AND year = ?'
+      params.push(filters.year)
+    }
+    if (filters.key) {
+      query += ' AND key_notation = ?'
+      params.push(filters.key)
+    }
+    if (filters.storage_status) {
+      query += ' AND storage_status = ?'
+      params.push(filters.storage_status)
+    }
+    if (filters.search) {
+      query += ' AND (artist LIKE ? OR title LIKE ? OR album LIKE ?)'
+      const searchTerm = `%${filters.search}%`
+      params.push(searchTerm, searchTerm, searchTerm)
+    }
+  }
+
+  query += ' ORDER BY last_analyzed_at DESC'
+  return db.prepare(query).all(...params) as LibraryTrack[]
+}
+
+export function updateLibraryTrackPath(fingerprint: string, newPath: string): boolean {
+  const result = db.prepare(`
+    UPDATE library_tracks
+    SET file_path = ?, last_seen_at = datetime('now'), storage_status = 'available'
+    WHERE fingerprint = ?
+  `).run(newPath, fingerprint)
+  return result.changes > 0
+}
+
+export function markLibraryTracksOffline(storageDevice: string): number {
+  const result = db.prepare(`
+    UPDATE library_tracks
+    SET storage_status = 'offline'
+    WHERE storage_device = ? AND storage_status = 'available'
+  `).run(storageDevice)
+  return result.changes
+}
+
+export function markLibraryTracksOnline(storageDevice: string): number {
+  const result = db.prepare(`
+    UPDATE library_tracks
+    SET storage_status = 'available'
+    WHERE storage_device = ? AND storage_status = 'offline'
+  `).run(storageDevice)
+  return result.changes
+}
+
+export function getLibraryStats(): {
+  total: number
+  byGenre: { genre: string, count: number }[]
+  byLabel: { label: string, count: number }[]
+  byYear: { year: number, count: number }[]
+  byStatus: { status: StorageStatus, count: number }[]
+} {
+  const total = (db.prepare('SELECT COUNT(*) as count FROM library_tracks').get() as { count: number }).count
+
+  const byGenre = db.prepare(`
+    SELECT genres as genre, COUNT(*) as count
+    FROM library_tracks
+    WHERE genres IS NOT NULL
+    GROUP BY genres
+    ORDER BY count DESC
+    LIMIT 20
+  `).all() as { genre: string, count: number }[]
+
+  const byLabel = db.prepare(`
+    SELECT label, COUNT(*) as count
+    FROM library_tracks
+    WHERE label IS NOT NULL
+    GROUP BY label
+    ORDER BY count DESC
+    LIMIT 20
+  `).all() as { label: string, count: number }[]
+
+  const byYear = db.prepare(`
+    SELECT year, COUNT(*) as count
+    FROM library_tracks
+    WHERE year IS NOT NULL
+    GROUP BY year
+    ORDER BY year DESC
+  `).all() as { year: number, count: number }[]
+
+  const byStatus = db.prepare(`
+    SELECT storage_status as status, COUNT(*) as count
+    FROM library_tracks
+    GROUP BY storage_status
+  `).all() as { status: StorageStatus, count: number }[]
+
+  return { total, byGenre, byLabel, byYear, byStatus }
+}
+
+export function deleteLibraryTrack(id: number): boolean {
+  const result = db.prepare('DELETE FROM library_tracks WHERE id = ?').run(id)
+  return result.changes > 0
 }
 
 export default db

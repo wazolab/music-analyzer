@@ -16,7 +16,7 @@
       </div>
 
       <div class="progress-stats">
-        <span>{{ job?.completed_files || 0 }} / {{ job?.total_files || 0 }} files</span>
+        <span>{{ job?.completed_files || 0 }} / {{ job?.total_files || 0 }} tracks</span>
         <span
           v-if="job?.failed_files > 0"
           class="failed"
@@ -29,7 +29,7 @@
         v-if="job?.current_file && job?.status === 'running'"
         class="current-file"
       >
-        Analyzing: {{ job.current_file }}
+        Current: {{ job.current_file }}
       </div>
 
       <!-- Logs section -->
@@ -55,7 +55,7 @@
         v-if="job?.status === 'completed'"
         class="success-message"
       >
-        Analysis complete! Files organized to {{ job.output_dir }}
+        Analysis complete! Tracks have been tagged and updated.
       </div>
 
       <div
@@ -124,7 +124,7 @@ onUnmounted(() => {
 const statusTitle = computed(() => {
   switch (job.value?.status) {
     case 'pending': return 'Preparing Analysis...'
-    case 'running': return 'Analyzing Files...'
+    case 'running': return 'Analyzing Tracks...'
     case 'completed': return 'Analysis Complete'
     case 'failed': return 'Analysis Failed'
     case 'cancelled': return 'Analysis Cancelled'

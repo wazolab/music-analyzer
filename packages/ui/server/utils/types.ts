@@ -74,6 +74,11 @@ export interface DownloadFile {
   genres: string | null
   artist: string | null
   title: string | null
+  album: string | null
+  label: string | null
+  year: number | null
+  fingerprint: string | null
+  fingerprint_duration: number | null
   discovered_at: string
   analyzed_at: string | null
 }
@@ -97,4 +102,57 @@ export interface MountedVolume {
   fstype: string
   size: string
   available: string
+}
+
+// Library types
+export type StorageStatus = 'available' | 'offline' | 'moved'
+
+export interface LibraryTrack {
+  id: number
+  fingerprint: string
+  fingerprint_duration: number
+  artist: string | null
+  title: string | null
+  album: string | null
+  label: string | null
+  year: number | null
+  bpm: number | null
+  key_notation: string | null
+  energy: number | null
+  genres: string | null // JSON array
+  file_path: string | null
+  file_size_bytes: number | null
+  storage_status: StorageStatus
+  storage_device: string | null
+  musicbrainz_id: string | null
+  first_seen_at: string
+  last_analyzed_at: string | null
+  last_seen_at: string | null
+}
+
+export interface LibraryTrackInput {
+  fingerprint: string
+  fingerprint_duration: number
+  artist?: string
+  title?: string
+  album?: string
+  label?: string
+  year?: number
+  bpm?: number
+  key_notation?: string
+  energy?: number
+  genres?: string[]
+  file_path?: string
+  file_size_bytes?: number
+  storage_device?: string
+  musicbrainz_id?: string
+}
+
+export interface LibraryFilters {
+  genre?: string
+  label?: string
+  year?: number
+  key?: string
+  storage_status?: StorageStatus
+  search?: string
 }

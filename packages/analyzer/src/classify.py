@@ -10,6 +10,11 @@ Optimizations:
 - Parallel processing with multiprocessing
 """
 
+# Suppress TensorFlow/Essentia warnings
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # Suppress TF info/warnings
+
 import argparse
 import json
 import os
@@ -26,6 +31,7 @@ from analyzers import (
     KeyAnalyzer,
     RhythmAnalyzer,
     TagData,
+    get_fingerprint,
     lookup_metadata,
 )
 from converter import convert_to_flac, needs_conversion
@@ -46,6 +52,8 @@ class AnalysisResult:
     album: Optional[str] = None
     label: Optional[str] = None
     year: Optional[int] = None
+    fingerprint: Optional[str] = None
+    fingerprint_duration: Optional[int] = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -78,9 +86,11 @@ class AudioAnalyzer:
 
     def load_models(self) -> "AudioAnalyzer":
         """Load ML models. Call before analyzing."""
-        self._log("Loading model...")
+        self._log("Loading models...")
         self.genre.load()
         self._log(f"Loaded {self.genre.num_labels} genre labels")
+        self.energy.load()
+        self._log("Loaded emomusic arousal model for energy detection")
         return self
 
     def analyze(self, file_path: str) -> Optional[AnalysisResult]:
@@ -118,6 +128,14 @@ class AudioAnalyzer:
         # Parse track info from filename
         track_info = parse_filename(filename)
 
+        # Generate fingerprint (used for library tracking and metadata lookup)
+        self._log("Generating fingerprint...")
+        fingerprint, fingerprint_duration = get_fingerprint(file_path)
+        if fingerprint:
+            self._log(f"Fingerprint generated ({fingerprint_duration}s)")
+        else:
+            self._log("⚠ Could not generate fingerprint")
+
         # Load audio (cached for different sample rates)
         loader = AudioLoader(file_path)
 
@@ -133,13 +151,15 @@ class AudioAnalyzer:
         key_result = self.key.analyze(audio_44k)
         self._log(f"Key: {key_result.notation} ({key_result.camelot})")
 
-        # Analyze energy
-        energy_result = self.energy.analyze(audio_44k)
-        self._log(f"Energy: {energy_result.level}/10")
+        # Load 16kHz audio for ML models
+        audio_16k = loader.load_for_ml()
+
+        # Analyze energy using emomusic arousal model (needs 16kHz)
+        energy_result = self.energy.analyze(audio_16k)
+        self._log(f"Energy: {energy_result.level}/10 (arousal: {energy_result.arousal:.2f})")
 
         # Classify genre (needs 16kHz audio)
         self._log("Running genre classification...")
-        audio_16k = loader.load_for_ml()
         genre_result = self.genre.analyze(audio_16k)
 
         self._log("\nTop 10 genres:")
@@ -221,6 +241,8 @@ class AudioAnalyzer:
             album=album,
             label=label,
             year=year,
+            fingerprint=fingerprint,
+            fingerprint_duration=fingerprint_duration,
         )
 
         # Write tags to file if enabled
@@ -232,6 +254,8 @@ class AudioAnalyzer:
                 energy=result.energy,
                 genres=result.genres,
                 year=result.year,
+                fingerprint=result.fingerprint,
+                fingerprint_duration=result.fingerprint_duration,
             )
             if self.tagger.write(file_path, tag_data):
                 self._log("✔ Tags written successfully")

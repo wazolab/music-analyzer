@@ -23,6 +23,8 @@ class TagData:
     artist: Optional[str] = None
     title: Optional[str] = None
     year: Optional[int] = None
+    fingerprint: Optional[str] = None  # Chromaprint/AcoustID fingerprint
+    fingerprint_duration: Optional[int] = None  # Duration used for fingerprint (seconds)
     analyzer_version: Optional[str] = None  # Marker for skip-analyzed
 
 
@@ -89,6 +91,11 @@ class AudioTagger:
         if data.year is not None:
             audio["DATE"] = str(data.year)
             audio["YEAR"] = str(data.year)
+
+        if data.fingerprint is not None:
+            audio["ACOUSTID_FINGERPRINT"] = data.fingerprint
+            if data.fingerprint_duration is not None:
+                audio["ACOUSTID_FINGERPRINT_DURATION"] = str(data.fingerprint_duration)
 
         # Always write analyzer version marker
         audio["ANALYZER"] = ANALYZER_VERSION
@@ -174,6 +181,12 @@ class AudioTagger:
                 genres=audio.get("GENRE", []),
                 artist=audio.get("ARTIST", [None])[0],
                 title=audio.get("TITLE", [None])[0],
+                fingerprint=audio.get("ACOUSTID_FINGERPRINT", [None])[0],
+                fingerprint_duration=(
+                    int(audio.get("ACOUSTID_FINGERPRINT_DURATION", [None])[0])
+                    if audio.get("ACOUSTID_FINGERPRINT_DURATION")
+                    else None
+                ),
             )
         except Exception:
             return TagData()

@@ -107,8 +107,8 @@ export default defineEventHandler(async (event) => {
       // Log everything for visibility
       addLog(line)
 
-      // Match "Found X FLAC files"
-      const foundMatch = line.match(/Found (\d+) FLAC files?/i)
+      // Match "Found X audio files" or "Found X FLAC files"
+      const foundMatch = line.match(/Found (\d+) (?:audio|FLAC) files?/i)
       if (foundMatch && foundMatch[1]) {
         totalFiles = parseInt(foundMatch[1], 10)
         updateAnalysisJobProgress(job.id, completed, failed, totalFiles)
@@ -169,11 +169,16 @@ export default defineEventHandler(async (event) => {
                 genres: result.genres,
                 artist: result.artist,
                 title: result.title,
+                album: result.album,
+                label: result.label,
+                year: result.year,
                 bpm: result.bpm,
                 key_notation: result.key,
                 energy: result.energy,
+                fingerprint: result.fingerprint,
+                fingerprint_duration: result.fingerprint_duration,
               })
-              console.log(`[Job ${job.id}] Updated download file: ${result.file} -> BPM:${result.bpm} Key:${result.key} Energy:${result.energy}`)
+              console.log(`[Job ${job.id}] Updated download file: ${result.file} -> BPM:${result.bpm} Key:${result.key} Energy:${result.energy} FP:${result.fingerprint ? 'yes' : 'no'}`)
             }
           }
           if (result.genres) {

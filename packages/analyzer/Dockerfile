@@ -26,6 +26,14 @@ RUN curl -L -o /tmp/discogs-effnet.zip \
 RUN curl -L -o models/genre_discogs400-discogs-effnet-1.json \
     "https://essentia.upf.edu/models/feature-extractors/discogs-effnet/discogs-effnet-bs64-1.json"
 
+# Download MSD-MusiCNN embedding model for arousal/energy prediction
+RUN curl -L -o models/msd-musicnn-1.pb \
+    "https://essentia.upf.edu/models/feature-extractors/musicnn/msd-musicnn-1.pb"
+
+# Download emomusic classification head (predicts arousal and valence)
+RUN curl -L -o models/emomusic-msd-musicnn-2.pb \
+    "https://essentia.upf.edu/models/classification-heads/emomusic/emomusic-msd-musicnn-2.pb"
+
 # Copy source files
 COPY src/analyzers/ ./analyzers/
 COPY src/utils.py ./

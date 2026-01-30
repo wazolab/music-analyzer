@@ -112,6 +112,14 @@
             <div class="selection-actions">
               <button
                 v-if="selectedAnalyzed.size > 0"
+                :disabled="addingToLibrary"
+                class="library-btn"
+                @click="addSelectedToLibrary"
+              >
+                {{ addingToLibrary ? 'Adding...' : `Add to Library (${selectedAnalyzed.size})` }}
+              </button>
+              <button
+                v-if="selectedAnalyzed.size > 0"
                 :disabled="analyzing"
                 class="reanalyze-btn"
                 @click="reanalyzeSelected"
@@ -199,6 +207,7 @@ const selectAll = ref(false)
 const selectAllAnalyzed = ref(false)
 const analyzing = ref(false)
 const deleting = ref(false)
+const addingToLibrary = ref(false)
 const currentJob = ref(null)
 const refreshing = ref(false)
 
@@ -387,6 +396,38 @@ async function reanalyzeSelected() {
   analyzing.value = false
 }
 
+async function addSelectedToLibrary() {
+  if (selectedAnalyzed.value.size === 0) return
+
+  addingToLibrary.value = true
+
+  try {
+    const result = await $fetch('/api/library/add', {
+      method: 'POST',
+      body: {
+        fileIds: Array.from(selectedAnalyzed.value),
+      },
+    })
+
+    if (result.added > 0) {
+      alert(`Added ${result.added} track(s) to library.${result.errors > 0 ? ` ${result.errors} failed.` : ''}`)
+    }
+    else if (result.errors > 0) {
+      const errorMsgs = result.errorDetails?.map(e => e.error).join(', ') || 'Unknown error'
+      alert(`Failed to add tracks: ${errorMsgs}`)
+    }
+
+    selectedAnalyzed.value = new Set()
+    selectAllAnalyzed.value = false
+  }
+  catch (e) {
+    console.error('Failed to add to library:', e)
+    alert(e.data?.message || 'Failed to add to library')
+  }
+
+  addingToLibrary.value = false
+}
+
 async function clearAnalyzed() {
   const analyzedFiles = files.value.filter(f => f.status === 'completed')
   if (analyzedFiles.length === 0) return
@@ -561,6 +602,22 @@ async function clearAnalyzed() {
 }
 
 .reanalyze-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.library-btn {
+  padding: 8px 16px;
+  background: #3498db;
+  color: #fff;
+  font-weight: 500;
+}
+
+.library-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.library-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

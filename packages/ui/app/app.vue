@@ -30,6 +30,14 @@
           <span class="nav-icon">🎵</span>
           <span>Analysis</span>
         </NuxtLink>
+        <NuxtLink
+          to="/library"
+          class="nav-item"
+          :class="{ active: route.path === '/library' }"
+        >
+          <span class="nav-icon">📚</span>
+          <span>Library</span>
+        </NuxtLink>
       </nav>
 
       <div class="sidebar-footer">

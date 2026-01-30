@@ -10,6 +10,7 @@
   - Update yt-dlp first: `sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && sudo chmod a+rx /usr/local/bin/yt-dlp`
   - Run `npm update` to update Node.js dependencies
   - Check for breaking changes in essentia.js and TensorFlow.js if audio analysis fails
+- **Use industry standards**: For audio analysis, prefer Essentia's built-in algorithms and industry standards (e.g., EBU R128 for loudness) over custom calculations. Essentia algorithms are well-tested and produce reliable, standardized results.
 
 ## Overview
 

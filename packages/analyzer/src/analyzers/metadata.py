@@ -61,6 +61,38 @@ def text_similarity(a: str, b: str) -> float:
     return len(intersection) / len(union)
 
 
+def get_fingerprint(file_path: str) -> tuple[Optional[str], Optional[int]]:
+    """
+    Generate audio fingerprint using fpcalc (Chromaprint).
+
+    Args:
+        file_path: Path to audio file
+
+    Returns:
+        Tuple of (fingerprint string, duration in seconds) or (None, None) on error
+    """
+    try:
+        result = subprocess.run(
+            ["fpcalc", "-json", file_path], capture_output=True, text=True, timeout=60
+        )
+        if result.returncode != 0:
+            print(f"fpcalc error: {result.stderr}")
+            return None, None
+
+        data = json.loads(result.stdout)
+        return data.get("fingerprint"), int(data.get("duration", 0))
+
+    except FileNotFoundError:
+        print("fpcalc not found. Install chromaprint-tools.")
+        return None, None
+    except subprocess.TimeoutExpired:
+        print("fpcalc timed out")
+        return None, None
+    except Exception as e:
+        print(f"Fingerprint error: {e}")
+        return None, None
+
+
 class MetadataLookup:
     """Look up track metadata using AcoustID fingerprinting, MusicBrainz, Discogs, and Bandcamp."""
 
@@ -107,7 +139,7 @@ class MetadataLookup:
             MetadataResult with track metadata
         """
         # Generate fingerprint (also gives us exact duration)
-        fingerprint, duration = self._get_fingerprint(file_path)
+        fingerprint, duration = get_fingerprint(file_path)
 
         # Try AcoustID + MusicBrainz first (most reliable - uses audio fingerprint)
         if fingerprint:
@@ -197,29 +229,6 @@ class MetadataLookup:
                 best_id = rec_id
 
         return best_id
-
-    def _get_fingerprint(self, file_path: str) -> tuple[Optional[str], Optional[int]]:
-        """Generate audio fingerprint using fpcalc (Chromaprint)."""
-        try:
-            result = subprocess.run(
-                ["fpcalc", "-json", file_path], capture_output=True, text=True, timeout=60
-            )
-            if result.returncode != 0:
-                print(f"fpcalc error: {result.stderr}")
-                return None, None
-
-            data = json.loads(result.stdout)
-            return data.get("fingerprint"), int(data.get("duration", 0))
-
-        except FileNotFoundError:
-            print("fpcalc not found. Install chromaprint-tools.")
-            return None, None
-        except subprocess.TimeoutExpired:
-            print("fpcalc timed out")
-            return None, None
-        except Exception as e:
-            print(f"Fingerprint error: {e}")
-            return None, None
 
     def _query_acoustid(self, fingerprint: str, duration: int) -> Tuple[List[dict], float]:
         """Query AcoustID API to get all MusicBrainz Recording matches with metadata."""
