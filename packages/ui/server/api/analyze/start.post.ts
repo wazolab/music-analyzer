@@ -152,19 +152,22 @@ export default defineEventHandler(async (event) => {
         try {
           const jsonStr = line.split('__RESULT__:')[1].trim()
           const result = JSON.parse(jsonStr)
-          if (result.genres) {
+          if (result.file) {
             // Update download_file by matching filename
-            if (result.file) {
-              const downloadFile = files.find(f => f?.filename === result.file)
-              if (downloadFile) {
-                updateDownloadFileAnalysis(downloadFile.id, {
-                  genres: result.genres,
-                  artist: result.artist,
-                  title: result.title
-                })
-                console.log(`[Job ${job.id}] Updated download file: ${result.file} -> ${result.genres[0]}`)
-              }
+            const downloadFile = files.find(f => f?.filename === result.file)
+            if (downloadFile) {
+              updateDownloadFileAnalysis(downloadFile.id, {
+                genres: result.genres,
+                artist: result.artist,
+                title: result.title,
+                bpm: result.bpm,
+                key_notation: result.key,
+                energy: result.energy
+              })
+              console.log(`[Job ${job.id}] Updated download file: ${result.file} -> BPM:${result.bpm} Key:${result.key} Energy:${result.energy}`)
             }
+          }
+          if (result.genres) {
             // Also update matching tracks in playlists
             if (result.artist && result.title) {
               const updated = matchAndUpdateTrackAnalysis(result.artist, result.title, {

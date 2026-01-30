@@ -80,6 +80,11 @@
             <div class="genre-files">
               <div v-for="file in group.files" :key="file.id" class="genre-file">
                 <span class="file-name">{{ file.filename }}</span>
+                <div class="file-analysis">
+                  <span v-if="file.bpm" class="analysis-badge bpm">{{ Math.round(file.bpm) }}</span>
+                  <span v-if="file.key_notation" class="analysis-badge key">{{ file.key_notation }}</span>
+                  <span v-if="file.energy" class="analysis-badge energy">E{{ file.energy }}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -463,6 +468,10 @@ async function clearAnalyzed() {
 .genre-file {
   padding: 8px 16px;
   border-bottom: 1px solid #2a2a4a;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
 }
 
 .genre-file:last-child {
@@ -472,9 +481,37 @@ async function clearAnalyzed() {
 .genre-file .file-name {
   color: #ccc;
   font-size: 0.85rem;
-  display: block;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.file-analysis {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.analysis-badge {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.analysis-badge.bpm {
+  color: #ffa502;
+  background: rgba(255, 165, 2, 0.15);
+}
+
+.analysis-badge.key {
+  color: #00dc82;
+  background: rgba(0, 220, 130, 0.15);
+}
+
+.analysis-badge.energy {
+  color: #3498db;
+  background: rgba(52, 152, 219, 0.15);
 }
 </style>

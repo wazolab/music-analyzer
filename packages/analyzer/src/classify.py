@@ -1,117 +1,161 @@
 #!/usr/bin/env python3
 """
-Genre classification using Essentia's Discogs-Effnet models.
-Uses TensorflowPredictEffnetDiscogs algorithm from essentia-tensorflow.
+Audio analyzer CLI - Extract BPM, key, energy, and genre from audio files.
+
+Uses Essentia's Discogs-Effnet models for genre classification.
 """
 
 import argparse
 import json
 import os
-import re
+from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Dict, List, Optional
 
-from essentia.standard import MonoLoader, TensorflowPredictEffnetDiscogs
-
-MODELS_DIR = Path("/app/models")
-
-
-def load_labels() -> list:
-    """Load genre labels from the model's JSON."""
-    labels_path = MODELS_DIR / "genre_discogs400-discogs-effnet-1.json"
-    with open(labels_path) as f:
-        data = json.load(f)
-    return data["classes"]
+from analyzers import (
+    AudioLoader,
+    RhythmAnalyzer,
+    KeyAnalyzer,
+    EnergyAnalyzer,
+    GenreClassifier,
+)
+from utils import parse_filename, find_audio_files
 
 
-def parse_filename(filename: str) -> tuple[str, str]:
-    """Extract artist and title from filename.
+@dataclass
+class AnalysisResult:
+    """Complete analysis result for a track."""
+    file: str
+    artist: str
+    title: str
+    bpm: int
+    key: str
+    energy: int
+    genres: List[str]
 
-    Handles formats like:
-    - "Artist - Title.flac"
-    - "01 - Title.flac" (track number prefix)
-    - "Artist - Title (feat. Someone).flac"
-    """
-    # Remove extension
-    name = Path(filename).stem
+    def to_dict(self) -> dict:
+        return asdict(self)
 
-    # Try to split by " - "
-    if " - " in name:
-        parts = name.split(" - ", 1)
-        artist = parts[0].strip()
-        title = parts[1].strip()
-
-        # Check if first part is a track number
-        if re.match(r'^\d+$', artist):
-            # No artist, just track number and title
-            return "", title
-
-        return artist, title
-
-    # No separator, use filename as title
-    return "", name
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict())
 
 
-def analyze_file(file_path: str, labels: list, model) -> dict:
-    """Analyze a single audio file."""
-    filename = os.path.basename(file_path)
-    print(f"\nAnalyzing: {filename}")
-    print("=" * 50)
+class AudioAnalyzer:
+    """Main analyzer orchestrating all analysis modules."""
 
-    # Parse artist/title from filename
-    artist, title = parse_filename(filename)
+    def __init__(self, verbose: bool = True):
+        self.verbose = verbose
+        self.rhythm = RhythmAnalyzer()
+        self.key = KeyAnalyzer()
+        self.energy = EnergyAnalyzer()
+        self.genre = GenreClassifier()
 
-    # Load audio at 16kHz mono
-    print("Loading audio...")
-    audio = MonoLoader(filename=file_path, sampleRate=16000, resampleQuality=4)()
-    print(f"Loaded {len(audio)} samples ({len(audio) / 16000:.1f}s)")
+    def load_models(self) -> "AudioAnalyzer":
+        """Load ML models. Call before analyzing."""
+        self._log("Loading model...")
+        self.genre.load()
+        self._log(f"Loaded {self.genre.num_labels} genre labels")
+        return self
 
-    # Run prediction
-    print("Running genre classification...")
-    predictions = model(audio)
-    print(f"Predictions shape: {predictions.shape}")
+    def analyze(self, file_path: str) -> AnalysisResult:
+        """
+        Analyze a single audio file.
 
-    # Average predictions across all patches
-    avg_predictions = predictions.mean(axis=0)
+        Args:
+            file_path: Path to audio file
 
-    # Sort by confidence
-    results = [
-        {"genre": labels[i], "confidence": float(avg_predictions[i])}
-        for i in range(len(labels))
-    ]
-    results.sort(key=lambda x: x["confidence"], reverse=True)
+        Returns:
+            AnalysisResult with all extracted features
+        """
+        filename = os.path.basename(file_path)
+        self._log(f"\nAnalyzing: {filename}")
+        self._log("=" * 50)
 
-    # Get top genres (confidence > 5%)
-    top_genres = [r["genre"] for r in results[:10] if r["confidence"] > 0.05]
+        # Parse track info from filename
+        track_info = parse_filename(filename)
 
-    # If no genres above 5%, take top 3
-    if not top_genres:
-        top_genres = [r["genre"] for r in results[:3]]
+        # Load audio (cached for different sample rates)
+        loader = AudioLoader(file_path)
 
-    print("\nTop 10 genres:")
-    for i, p in enumerate(results[:10]):
-        bar = "█" * int(p["confidence"] * 50)
-        print(f"  {i+1}. {p['genre']:<35} {p['confidence']*100:>5.1f}% {bar}")
+        self._log("Loading audio...")
+        audio_44k = loader.load_for_analysis()
+        self._log(f"Loaded {audio_44k.num_samples} samples ({audio_44k.duration:.1f}s)")
 
-    # Output JSON result for parsing by UI
-    result = {
-        "artist": artist,
-        "title": title,
-        "genres": top_genres,
-        "file": filename
-    }
-    print(f"\n__RESULT__: {json.dumps(result)}")
+        # Analyze rhythm (BPM)
+        rhythm_result = self.rhythm.analyze(audio_44k)
+        self._log(f"BPM: {rhythm_result.bpm}")
 
-    return {
-        "artist": artist,
-        "title": title,
-        "genres": top_genres,
-        "all_predictions": results
-    }
+        # Analyze key
+        key_result = self.key.analyze(audio_44k)
+        self._log(f"Key: {key_result.notation} ({key_result.camelot})")
+
+        # Analyze energy
+        energy_result = self.energy.analyze(audio_44k)
+        self._log(f"Energy: {energy_result.level}/10")
+
+        # Classify genre (needs 16kHz audio)
+        self._log("Running genre classification...")
+        audio_16k = loader.load_for_ml()
+        genre_result = self.genre.analyze(audio_16k)
+
+        self._log(f"\nTop 10 genres:")
+        self._log(self.genre.format_predictions(genre_result))
+
+        # Build result
+        result = AnalysisResult(
+            file=filename,
+            artist=track_info.artist,
+            title=track_info.title,
+            bpm=rhythm_result.bpm,
+            key=key_result.camelot,
+            energy=energy_result.level,
+            genres=genre_result.top_genres,
+        )
+
+        # Output JSON for UI parsing
+        self._log(f"\n__RESULT__: {result.to_json()}")
+
+        return result
+
+    def analyze_directory(
+        self,
+        directory: Path,
+        recursive: bool = True
+    ) -> Dict[str, AnalysisResult]:
+        """
+        Analyze all audio files in a directory.
+
+        Args:
+            directory: Directory to scan
+            recursive: Whether to search subdirectories
+
+        Returns:
+            Dict mapping file paths to results
+        """
+        audio_files = find_audio_files(directory, recursive)
+        self._log(f"Found {len(audio_files)} audio files")
+
+        results = {}
+        for i, audio_file in enumerate(audio_files, 1):
+            self._log(f"\n[{i}/{len(audio_files)}] Processing...")
+            try:
+                result = self.analyze(str(audio_file))
+                results[str(audio_file)] = result
+                self._log(f"✔ Completed: {audio_file.name}")
+            except Exception as e:
+                self._log(f"✗ Failed: {audio_file.name} - {e}")
+
+        return results
+
+    def _log(self, message: str) -> None:
+        """Print message if verbose mode is enabled."""
+        if self.verbose:
+            print(message)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Analyze audio files for genre classification"
+        description="Analyze audio files for BPM, key, energy, and genre"
     )
     parser.add_argument(
         "input",
@@ -120,12 +164,17 @@ def main():
     )
     parser.add_argument(
         "-o", "--output",
-        help="Output directory (not used in genre-only mode)"
+        help="Output directory (not used in current mode)"
     )
     parser.add_argument(
         "--json",
         action="store_true",
         help="Output results as JSON"
+    )
+    parser.add_argument(
+        "-q", "--quiet",
+        action="store_true",
+        help="Suppress verbose output"
     )
 
     args = parser.parse_args()
@@ -134,43 +183,26 @@ def main():
         parser.print_help()
         return
 
-    # Load labels and model once
-    print("Loading model...")
-    labels = load_labels()
-    print(f"Loaded {len(labels)} genre labels")
-
-    model_path = MODELS_DIR / "discogs-effnet"
-    model = TensorflowPredictEffnetDiscogs(
-        graphFilename="",
-        savedModel=str(model_path),
-        output="PartitionedCall"
-    )
+    # Initialize analyzer
+    analyzer = AudioAnalyzer(verbose=not args.quiet)
+    analyzer.load_models()
 
     input_path = Path(args.input)
-    all_results = {}
 
     if input_path.is_dir():
-        audio_files = list(input_path.glob("**/*.flac")) + \
-                     list(input_path.glob("**/*.mp3")) + \
-                     list(input_path.glob("**/*.wav"))
-        print(f"Found {len(audio_files)} audio files")
-
-        for i, audio_file in enumerate(audio_files, 1):
-            print(f"\n[{i}/{len(audio_files)}] Processing...")
-            try:
-                results = analyze_file(str(audio_file), labels, model)
-                all_results[str(audio_file)] = results
-                print(f"✔ Completed: {audio_file.name}")
-            except Exception as e:
-                print(f"✗ Failed: {audio_file.name} - {e}")
+        results = analyzer.analyze_directory(input_path)
     else:
-        results = analyze_file(str(input_path), labels, model)
-        all_results[str(input_path)] = results
+        result = analyzer.analyze(str(input_path))
+        results = {str(input_path): result}
 
-    print(f"\nTotal files processed: {len(all_results)}")
+    print(f"\nTotal files processed: {len(results)}")
 
     if args.json:
-        print(json.dumps(all_results, indent=2))
+        output = {
+            path: result.to_dict()
+            for path, result in results.items()
+        }
+        print(json.dumps(output, indent=2))
 
 
 if __name__ == "__main__":

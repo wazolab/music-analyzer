@@ -25,7 +25,9 @@ RUN curl -L -o /tmp/discogs-effnet.zip \
 RUN curl -L -o models/genre_discogs400-discogs-effnet-1.json \
     "https://essentia.upf.edu/models/feature-extractors/discogs-effnet/discogs-effnet-bs64-1.json"
 
-# Copy inference script
+# Copy source files
+COPY src/analyzers/ ./analyzers/
+COPY src/utils.py ./
 COPY src/classify.py ./
 
 ENTRYPOINT ["python3", "classify.py"]
