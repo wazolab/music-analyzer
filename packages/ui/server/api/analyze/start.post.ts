@@ -57,6 +57,7 @@ export default defineEventHandler(async (event) => {
     'music-analyzer',
     '--write-tags',
     '--convert',  // Convert non-FLAC to FLAC for library integrity
+    '--skip-analyzed',  // Skip files already processed by analyzer
     '/input'
   ]
 

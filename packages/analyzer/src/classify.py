@@ -4,16 +4,20 @@ Audio analyzer CLI - Extract BPM, key, energy, and genre from audio files.
 
 Uses Essentia's Discogs-Effnet models for genre classification.
 
-TODO: Audio is loaded twice (44100Hz for BPM/key, 16000Hz for genre model).
-      Could resample in memory instead for better performance.
+Optimizations:
+- In-memory resampling (load once at 44.1kHz, resample to 16kHz)
+- Skip already-analyzed files (checks ANALYZER tag)
+- Parallel processing with multiprocessing
 """
 
 import argparse
 import json
 import os
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
+from multiprocessing import cpu_count
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from analyzers import (
     AudioLoader,
@@ -58,12 +62,14 @@ class AudioAnalyzer:
         verbose: bool = True,
         write_tags: bool = False,
         metadata_lookup: bool = False,
-        convert_to_flac: bool = False
+        convert_to_flac: bool = False,
+        skip_analyzed: bool = False
     ):
         self.verbose = verbose
         self.write_tags = write_tags
         self.metadata_lookup = metadata_lookup
         self.convert_to_flac_enabled = convert_to_flac
+        self.skip_analyzed = skip_analyzed
         self.rhythm = RhythmAnalyzer()
         self.key = KeyAnalyzer()
         self.energy = EnergyAnalyzer()
@@ -77,7 +83,7 @@ class AudioAnalyzer:
         self._log(f"Loaded {self.genre.num_labels} genre labels")
         return self
 
-    def analyze(self, file_path: str) -> AnalysisResult:
+    def analyze(self, file_path: str) -> Optional[AnalysisResult]:
         """
         Analyze a single audio file.
 
@@ -85,11 +91,16 @@ class AudioAnalyzer:
             file_path: Path to audio file
 
         Returns:
-            AnalysisResult with all extracted features
+            AnalysisResult with all extracted features, or None if skipped
         """
         filename = os.path.basename(file_path)
         self._log(f"\nAnalyzing: {filename}")
         self._log("=" * 50)
+
+        # Skip if already analyzed by this tool
+        if self.skip_analyzed and self.tagger.is_analyzed(file_path):
+            self._log("⏭ Skipping (already analyzed)")
+            return None
 
         # Convert to FLAC if enabled and needed
         if self.convert_to_flac_enabled and needs_conversion(file_path):
@@ -234,7 +245,7 @@ class AudioAnalyzer:
         recursive: bool = True
     ) -> Dict[str, AnalysisResult]:
         """
-        Analyze all audio files in a directory.
+        Analyze all audio files in a directory (sequential).
 
         Args:
             directory: Directory to scan
@@ -247,14 +258,21 @@ class AudioAnalyzer:
         self._log(f"Found {len(audio_files)} audio files")
 
         results = {}
+        skipped = 0
         for i, audio_file in enumerate(audio_files, 1):
             self._log(f"\n[{i}/{len(audio_files)}] Processing...")
             try:
                 result = self.analyze(str(audio_file))
-                results[str(audio_file)] = result
-                self._log(f"✔ Completed: {audio_file.name}")
+                if result is None:
+                    skipped += 1
+                else:
+                    results[str(audio_file)] = result
+                    self._log(f"✔ Completed: {audio_file.name}")
             except Exception as e:
                 self._log(f"✗ Failed: {audio_file.name} - {e}")
+
+        if skipped > 0:
+            self._log(f"\n⏭ Skipped {skipped} already-analyzed files")
 
         return results
 
@@ -262,6 +280,123 @@ class AudioAnalyzer:
         """Print message if verbose mode is enabled."""
         if self.verbose:
             print(message)
+
+
+# Worker function for parallel processing (must be at module level for pickling)
+def _analyze_file_worker(args: Tuple[str, dict]) -> Tuple[str, Optional[dict], Optional[str]]:
+    """
+    Worker function to analyze a single file in a separate process.
+
+    Args:
+        args: Tuple of (file_path, analyzer_config)
+
+    Returns:
+        Tuple of (file_path, result_dict or None, error_message or None)
+    """
+    file_path, config = args
+    try:
+        # Create analyzer in worker process (loads model)
+        analyzer = AudioAnalyzer(
+            verbose=False,  # Quiet in workers
+            write_tags=config.get("write_tags", False),
+            metadata_lookup=config.get("metadata_lookup", False),
+            convert_to_flac=config.get("convert_to_flac", False),
+            skip_analyzed=config.get("skip_analyzed", False),
+        )
+        analyzer.load_models()
+
+        result = analyzer.analyze(file_path)
+        if result is None:
+            return (file_path, None, "skipped")
+        return (file_path, result.to_dict(), None)
+    except Exception as e:
+        return (file_path, None, str(e))
+
+
+def analyze_directory_parallel(
+    directory: Path,
+    workers: int = 4,
+    recursive: bool = True,
+    write_tags: bool = False,
+    metadata_lookup: bool = False,
+    convert_to_flac: bool = False,
+    skip_analyzed: bool = False,
+    verbose: bool = True
+) -> Dict[str, AnalysisResult]:
+    """
+    Analyze all audio files in a directory using parallel processing.
+
+    Args:
+        directory: Directory to scan
+        workers: Number of parallel workers
+        recursive: Whether to search subdirectories
+        write_tags: Write tags to files
+        metadata_lookup: Look up metadata
+        convert_to_flac: Convert to FLAC
+        skip_analyzed: Skip already-analyzed files
+        verbose: Print progress
+
+    Returns:
+        Dict mapping file paths to results
+    """
+    audio_files = find_audio_files(directory, recursive)
+    total = len(audio_files)
+
+    if verbose:
+        print(f"Found {total} audio files")
+        print(f"Using {workers} parallel workers")
+
+    config = {
+        "write_tags": write_tags,
+        "metadata_lookup": metadata_lookup,
+        "convert_to_flac": convert_to_flac,
+        "skip_analyzed": skip_analyzed,
+    }
+
+    results = {}
+    completed = 0
+    skipped = 0
+    failed = 0
+
+    # Prepare work items
+    work_items = [(str(f), config) for f in audio_files]
+
+    with ProcessPoolExecutor(max_workers=workers) as executor:
+        futures = {executor.submit(_analyze_file_worker, item): item[0] for item in work_items}
+
+        for future in as_completed(futures):
+            file_path = futures[future]
+            filename = os.path.basename(file_path)
+            completed += 1
+
+            try:
+                path, result_dict, error = future.result()
+
+                if error == "skipped":
+                    skipped += 1
+                    if verbose:
+                        print(f"[{completed}/{total}] ⏭ Skipped: {filename}")
+                elif error:
+                    failed += 1
+                    if verbose:
+                        print(f"[{completed}/{total}] ✗ Failed: {filename} - {error}")
+                else:
+                    # Reconstruct AnalysisResult from dict
+                    result = AnalysisResult(**result_dict)
+                    results[path] = result
+                    if verbose:
+                        print(f"[{completed}/{total}] ✔ {filename} - {result.bpm} BPM, {result.key}")
+                    # Print JSON for UI parsing
+                    print(f"__RESULT__: {json.dumps(result_dict)}")
+            except Exception as e:
+                failed += 1
+                if verbose:
+                    print(f"[{completed}/{total}] ✗ Failed: {filename} - {e}")
+
+    if verbose:
+        print(f"\nCompleted: {len(results)}, Skipped: {skipped}, Failed: {failed}")
+
+    return results
 
 
 def main():
@@ -302,6 +437,18 @@ def main():
         action="store_true",
         help="Convert non-FLAC files to FLAC before analysis (requires ffmpeg)"
     )
+    parser.add_argument(
+        "-s", "--skip-analyzed",
+        action="store_true",
+        help="Skip files already processed by this analyzer (checks ANALYZER tag)"
+    )
+    parser.add_argument(
+        "-p", "--parallel",
+        type=int,
+        metavar="N",
+        default=0,
+        help="Use N parallel workers (0 = sequential, default)"
+    )
 
     args = parser.parse_args()
 
@@ -309,22 +456,36 @@ def main():
         parser.print_help()
         return
 
-    # Initialize analyzer
-    analyzer = AudioAnalyzer(
-        verbose=not args.quiet,
-        write_tags=args.write_tags,
-        metadata_lookup=args.lookup,
-        convert_to_flac=args.convert
-    )
-    analyzer.load_models()
-
     input_path = Path(args.input)
 
-    if input_path.is_dir():
-        results = analyzer.analyze_directory(input_path)
+    # Use parallel processing for directories if requested
+    if input_path.is_dir() and args.parallel > 0:
+        results = analyze_directory_parallel(
+            input_path,
+            workers=args.parallel,
+            recursive=True,
+            write_tags=args.write_tags,
+            metadata_lookup=args.lookup,
+            convert_to_flac=args.convert,
+            skip_analyzed=args.skip_analyzed,
+            verbose=not args.quiet
+        )
     else:
-        result = analyzer.analyze(str(input_path))
-        results = {str(input_path): result}
+        # Sequential processing
+        analyzer = AudioAnalyzer(
+            verbose=not args.quiet,
+            write_tags=args.write_tags,
+            metadata_lookup=args.lookup,
+            convert_to_flac=args.convert,
+            skip_analyzed=args.skip_analyzed
+        )
+        analyzer.load_models()
+
+        if input_path.is_dir():
+            results = analyzer.analyze_directory(input_path)
+        else:
+            result = analyzer.analyze(str(input_path))
+            results = {str(input_path): result} if result else {}
 
     print(f"\nTotal files processed: {len(results)}")
 

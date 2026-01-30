@@ -9,6 +9,10 @@ from mutagen.mp3 import MP3
 from mutagen.id3 import ID3, TBPM, TKEY, TCON, TXXX, TDRC
 
 
+# Version marker to identify files processed by this analyzer
+ANALYZER_VERSION = "music-analyzer-1.0"
+
+
 @dataclass
 class TagData:
     """Data to write to audio tags."""
@@ -19,6 +23,7 @@ class TagData:
     artist: Optional[str] = None
     title: Optional[str] = None
     year: Optional[int] = None
+    analyzer_version: Optional[str] = None  # Marker for skip-analyzed
 
 
 class AudioTagger:
@@ -85,6 +90,9 @@ class AudioTagger:
             audio["DATE"] = str(data.year)
             audio["YEAR"] = str(data.year)
 
+        # Always write analyzer version marker
+        audio["ANALYZER"] = ANALYZER_VERSION
+
         audio.save()
         return True
 
@@ -116,8 +124,32 @@ class AudioTagger:
         if data.year is not None:
             tags.add(TDRC(encoding=3, text=[str(data.year)]))
 
+        # Always write analyzer version marker
+        tags.add(TXXX(encoding=3, desc="ANALYZER", text=[ANALYZER_VERSION]))
+
         audio.save()
         return True
+
+    def is_analyzed(self, file_path: str) -> bool:
+        """Check if file has been processed by this analyzer."""
+        path = Path(file_path)
+        ext = path.suffix.lower()
+
+        try:
+            if ext == ".flac":
+                audio = FLAC(file_path)
+                marker = audio.get("ANALYZER", [None])[0]
+                return marker is not None and marker.startswith("music-analyzer")
+            elif ext == ".mp3":
+                audio = MP3(file_path)
+                tags = audio.tags or {}
+                for key in tags:
+                    if key.startswith("TXXX:ANALYZER"):
+                        return True
+                return False
+        except Exception:
+            return False
+        return False
 
     def read_existing(self, file_path: str) -> TagData:
         """Read existing tags from audio file."""
