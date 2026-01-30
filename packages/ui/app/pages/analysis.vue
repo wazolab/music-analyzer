@@ -79,9 +79,16 @@
             </div>
             <div class="genre-files">
               <div v-for="file in group.files" :key="file.id" class="genre-file">
-                <span class="file-name">{{ file.filename }}</span>
+                <div class="file-info">
+                  <span class="file-track" v-if="file.artist && file.title">
+                    <span class="track-artist">{{ file.artist }}</span>
+                    <span class="track-separator"> - </span>
+                    <span class="track-title">{{ file.title }}</span>
+                  </span>
+                  <span class="file-name" v-else>{{ file.filename }}</span>
+                </div>
                 <div class="file-analysis">
-                  <span v-if="file.bpm" class="analysis-badge bpm">{{ Math.round(file.bpm) }}</span>
+                  <span v-if="file.bpm" class="analysis-badge bpm">{{ Math.round(file.bpm) }} BPM</span>
                   <span v-if="file.key_notation" class="analysis-badge key">{{ file.key_notation }}</span>
                   <span v-if="file.energy" class="analysis-badge energy">E{{ file.energy }}</span>
                 </div>
@@ -478,10 +485,38 @@ async function clearAnalyzed() {
   border-bottom: none;
 }
 
+.file-info {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.file-track {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-track .track-artist {
+  color: #00dc82;
+  font-size: 0.85rem;
+}
+
+.file-track .track-separator {
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.file-track .track-title {
+  color: #eee;
+  font-size: 0.85rem;
+}
+
 .genre-file .file-name {
   color: #ccc;
   font-size: 0.85rem;
-  flex: 1;
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

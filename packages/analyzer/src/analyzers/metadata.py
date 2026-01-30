@@ -61,18 +61,21 @@ def text_similarity(a: str, b: str) -> float:
 
 
 class MetadataLookup:
-    """Look up track metadata using AcoustID fingerprinting and MusicBrainz."""
+    """Look up track metadata using AcoustID fingerprinting, MusicBrainz, Discogs, and Bandcamp."""
 
     ACOUSTID_URL = "https://api.acoustid.org/v2/lookup"
     MUSICBRAINZ_URL = "https://musicbrainz.org/ws/2"
+    DISCOGS_URL = "https://api.discogs.com"
+    BANDCAMP_SEARCH_URL = "https://bandcamp.com/search"
     USER_AGENT = "MusicAnalyzer/1.0 (https://github.com/music-analyzer)"
 
-    def __init__(self, acoustid_api_key: Optional[str] = None):
+    def __init__(self, acoustid_api_key: Optional[str] = None, discogs_token: Optional[str] = None):
         """
         Initialize metadata lookup.
 
         Args:
             acoustid_api_key: AcoustID API key. If not provided, uses ACOUSTID_API_KEY env var.
+            discogs_token: Discogs personal access token. If not provided, uses DISCOGS_TOKEN env var.
         """
         self.api_key = acoustid_api_key or os.environ.get("ACOUSTID_API_KEY")
         if not self.api_key:
@@ -80,6 +83,7 @@ class MetadataLookup:
                 "AcoustID API key required. Set ACOUSTID_API_KEY environment variable "
                 "or get a free key at https://acoustid.org/api-key"
             )
+        self.discogs_token = discogs_token or os.environ.get("DISCOGS_TOKEN")
 
     def lookup(
         self,
@@ -89,6 +93,12 @@ class MetadataLookup:
     ) -> MetadataResult:
         """
         Look up metadata for an audio file.
+
+        Lookup chain:
+        1. AcoustID + MusicBrainz (audio fingerprint) - most reliable
+        2. Discogs search (artist + title) - fallback for niche tracks
+        3. Bandcamp search (artist + title) - fallback for very niche electronic releases
+        4. Returns empty result if all fail
 
         Args:
             file_path: Path to audio file
@@ -100,25 +110,34 @@ class MetadataLookup:
         """
         # Generate fingerprint (also gives us exact duration)
         fingerprint, duration = self._get_fingerprint(file_path)
-        if not fingerprint:
-            return MetadataResult()
 
-        # Query AcoustID - get all recordings with duration info
-        recordings, confidence = self._query_acoustid(fingerprint, duration)
-        if not recordings:
-            return MetadataResult()
+        # Try AcoustID + MusicBrainz first (most reliable - uses audio fingerprint)
+        if fingerprint:
+            recordings, confidence = self._query_acoustid(fingerprint, duration)
+            if recordings:
+                recording_id = self._find_best_recording(recordings, duration, hint_artist, hint_title)
+                if recording_id:
+                    result = self._query_musicbrainz(recording_id)
+                    if result.title:  # Got valid metadata
+                        result.confidence = confidence
+                        result.musicbrainz_id = recording_id
+                        return result
 
-        # Find best matching recording using duration (primary) and filename hints (secondary)
-        recording_id = self._find_best_recording(recordings, duration, hint_artist, hint_title)
-        if not recording_id:
-            return MetadataResult()
+        # Fallback to Discogs search (text-based, for niche tracks)
+        if hint_artist and hint_title and self.discogs_token:
+            print("AcoustID/MusicBrainz failed, trying Discogs...")
+            result = self._query_discogs(hint_artist, hint_title)
+            if result.title:
+                return result
 
-        # Query MusicBrainz for full metadata
-        result = self._query_musicbrainz(recording_id)
-        result.confidence = confidence
-        result.musicbrainz_id = recording_id
+        # Fallback to Bandcamp search (for very niche electronic releases)
+        if hint_artist and hint_title:
+            print("Discogs failed, trying Bandcamp...")
+            result = self._query_bandcamp(hint_artist, hint_title)
+            if result.title:
+                return result
 
-        return result
+        return MetadataResult()
 
     def _find_best_recording(
         self,
@@ -345,27 +364,372 @@ class MetadataLookup:
             print(f"MusicBrainz query error: {e}")
             return MetadataResult()
 
+    def _query_discogs(self, artist: str, title: str) -> MetadataResult:
+        """
+        Query Discogs API to search for a track by artist and title.
+
+        This is a fallback for niche tracks not found in MusicBrainz.
+        """
+        if not self.discogs_token:
+            return MetadataResult()
+
+        # Search for the track
+        query = f"{artist} {title}"
+        params = {
+            "q": query,
+            "type": "release",
+            "per_page": "10"
+        }
+
+        url = f"{self.DISCOGS_URL}/database/search?{urllib.parse.urlencode(params)}"
+
+        try:
+            # Discogs rate limit: 60 requests per minute
+            time.sleep(1)
+            req = urllib.request.Request(url, headers={
+                "User-Agent": self.USER_AGENT,
+                "Authorization": f"Discogs token={self.discogs_token}"
+            })
+            with urllib.request.urlopen(req, timeout=10) as response:
+                data = json.loads(response.read().decode())
+
+            results = data.get("results", [])
+            if not results:
+                return MetadataResult()
+
+            # Find best match using text similarity
+            best_score = 0.0
+            best_result = None
+
+            for result in results:
+                result_title = result.get("title", "")  # Format: "Artist - Title"
+
+                # Parse "Artist - Title" format
+                if " - " in result_title:
+                    parts = result_title.split(" - ", 1)
+                    result_artist = parts[0]
+                    result_track = parts[1] if len(parts) > 1 else ""
+                else:
+                    result_artist = ""
+                    result_track = result_title
+
+                # Calculate similarity
+                artist_sim = text_similarity(artist, result_artist)
+                title_sim = text_similarity(title, result_track)
+                score = (artist_sim * 0.4) + (title_sim * 0.6)
+
+                if score > best_score:
+                    best_score = score
+                    best_result = result
+
+            if not best_result or best_score < 0.3:
+                return MetadataResult()
+
+            # Extract metadata from best match
+            release_title = best_result.get("title", "")
+            if " - " in release_title:
+                parts = release_title.split(" - ", 1)
+                found_artist = parts[0]
+                found_title = parts[1] if len(parts) > 1 else title
+            else:
+                found_artist = artist
+                found_title = release_title or title
+
+            # Extract year from release
+            year = None
+            year_str = best_result.get("year")
+            if year_str:
+                try:
+                    year = int(year_str)
+                except ValueError:
+                    pass
+
+            # Extract label
+            label = None
+            labels = best_result.get("label", [])
+            if labels:
+                label = labels[0]
+
+            # Get release details for more info (optional - makes another API call)
+            resource_url = best_result.get("resource_url")
+            album = None
+            if resource_url:
+                try:
+                    time.sleep(1)  # Rate limit
+                    req = urllib.request.Request(resource_url, headers={
+                        "User-Agent": self.USER_AGENT,
+                        "Authorization": f"Discogs token={self.discogs_token}"
+                    })
+                    with urllib.request.urlopen(req, timeout=10) as response:
+                        release_data = json.loads(response.read().decode())
+
+                    # Get album title (release title without artist prefix)
+                    album = release_data.get("title")
+
+                    # Get more accurate year if available
+                    if not year and release_data.get("year"):
+                        try:
+                            year = int(release_data["year"])
+                        except ValueError:
+                            pass
+
+                    # Get label from release details
+                    release_labels = release_data.get("labels", [])
+                    if release_labels:
+                        label = release_labels[0].get("name")
+
+                except Exception as e:
+                    print(f"Discogs release details error: {e}")
+
+            return MetadataResult(
+                title=found_title,
+                artist=found_artist,
+                album=album,
+                label=label,
+                year=year,
+                confidence=best_score
+            )
+
+        except Exception as e:
+            print(f"Discogs query error: {e}")
+            return MetadataResult()
+
+    def _query_bandcamp(self, artist: str, title: str) -> MetadataResult:
+        """
+        Query Bandcamp by scraping search results.
+
+        This is a fallback for very niche electronic releases not found elsewhere.
+        """
+        import re
+
+        # Clean up artist and title for better search
+        # Remove years like (2025), [2025]
+        clean_title = re.sub(r'\s*[\(\[]?\d{4}[\)\]]?\s*$', '', title).strip()
+        # Split multiple artists and get the first/main one
+        # Handle separators: ", ", " & ", " x ", " feat. ", " ft. "
+        main_artist = re.split(r'\s*[,&x]\s*|\s+feat\.?\s+|\s+ft\.?\s+', artist, flags=re.IGNORECASE)[0].strip()
+        # Normalize remaining artist separators
+        clean_artist = artist.replace(",", " ").replace("&", " ")
+        clean_artist = re.sub(r'\s+', ' ', clean_artist).strip()
+
+        # Try multiple search queries in order of specificity
+        search_queries = [
+            f"{main_artist} {clean_title}",  # Main artist + title (best for collabs)
+            f"{clean_artist} {clean_title}",  # All artists + title
+            clean_title,  # Just title (often works for EP/album names)
+        ]
+
+        album_matches = []
+        for query in search_queries:
+            params = {
+                "q": query,
+                "item_type": "a"  # Search for albums
+            }
+
+            url = f"{self.BANDCAMP_SEARCH_URL}?{urllib.parse.urlencode(params)}"
+
+            try:
+                time.sleep(0.5)  # Be respectful
+                req = urllib.request.Request(url, headers={"User-Agent": self.USER_AGENT})
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    html = response.read().decode()
+
+                # Find album or track URLs from search results
+                album_pattern = r'href="(https://[^"]+\.bandcamp\.com/album/[^"?]+)'
+                track_pattern = r'href="(https://[^"]+\.bandcamp\.com/track/[^"?]+)'
+                album_matches = list(set(re.findall(album_pattern, html)))
+                track_matches = list(set(re.findall(track_pattern, html)))
+
+                if album_matches:
+                    break
+
+                # Try track search if no albums found
+                params["item_type"] = "t"
+                url = f"{self.BANDCAMP_SEARCH_URL}?{urllib.parse.urlencode(params)}"
+                req = urllib.request.Request(url, headers={"User-Agent": self.USER_AGENT})
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    html = response.read().decode()
+
+                album_matches = list(set(re.findall(album_pattern, html)))
+                track_matches = list(set(re.findall(track_pattern, html)))
+
+                # Convert track URLs to album URLs by fetching track page
+                if track_matches and not album_matches:
+                    for track_url in track_matches[:3]:
+                        try:
+                            time.sleep(0.3)
+                            req = urllib.request.Request(track_url, headers={"User-Agent": self.USER_AGENT})
+                            with urllib.request.urlopen(req, timeout=10) as response:
+                                track_html = response.read().decode()
+
+                            # Extract base URL from track URL (e.g., https://wajang.bandcamp.com)
+                            base_url_match = re.match(r'(https://[^/]+)', track_url)
+                            if not base_url_match:
+                                continue
+                            base_url = base_url_match.group(1)
+
+                            # First try to find album URL in JSON-LD data
+                            json_album_match = re.search(r'"album_url"\s*:\s*"(/album/[^"]+)"', track_html)
+                            if json_album_match:
+                                album_url = base_url + json_album_match.group(1)
+                                album_matches.append(album_url)
+                                continue
+
+                            # Try relative album link on same page
+                            relative_album_match = re.search(r'href="(/album/[^"]+)"', track_html)
+                            if relative_album_match:
+                                album_url = base_url + relative_album_match.group(1)
+                                album_matches.append(album_url)
+                                continue
+
+                        except Exception:
+                            continue
+
+                if album_matches:
+                    break
+
+            except Exception as e:
+                print(f"Bandcamp search error for '{query}': {e}")
+                continue
+
+        if not album_matches:
+            return MetadataResult()
+
+        try:
+            # Try first few results to find best match
+            best_result = None
+            best_score = 0.0
+
+            for album_url in album_matches[:5]:
+                time.sleep(0.5)  # Rate limit
+                try:
+                    req = urllib.request.Request(album_url, headers={"User-Agent": self.USER_AGENT})
+                    with urllib.request.urlopen(req, timeout=10) as response:
+                        album_html = response.read().decode()
+
+                    # Extract metadata from album page
+                    # Artist name
+                    artist_match = re.search(r'<span[^>]*>by\s*</span>\s*<a[^>]*>([^<]+)</a>', album_html)
+                    found_artist = artist_match.group(1).strip() if artist_match else None
+
+                    # Album title
+                    album_match = re.search(r'<h2[^>]*class="trackTitle"[^>]*>([^<]+)</h2>', album_html)
+                    if not album_match:
+                        album_match = re.search(r'"name"\s*:\s*"([^"]+)"', album_html)
+                    found_album = album_match.group(1).strip() if album_match else None
+
+                    # Track titles - check if our track is on this album
+                    track_pattern = r'<span[^>]*class="track-title"[^>]*>([^<]+)</span>'
+                    tracks = re.findall(track_pattern, album_html)
+
+                    # Also try JSON-LD format
+                    if not tracks:
+                        track_json_pattern = r'"track"[^}]*"name"\s*:\s*"([^"]+)"'
+                        tracks = re.findall(track_json_pattern, album_html)
+
+                    # Check if title matches any track
+                    title_score = 0.0
+                    found_title = title
+                    for track in tracks:
+                        sim = text_similarity(title, track.strip())
+                        if sim > title_score:
+                            title_score = sim
+                            found_title = track.strip()
+
+                    # Calculate overall match score
+                    artist_score = text_similarity(artist, found_artist or "")
+                    score = (artist_score * 0.4) + (title_score * 0.6)
+
+                    # Release date
+                    date_match = re.search(r'release[sd]?\s+(\w+\s+\d{1,2},?\s+)?(\d{4})', album_html, re.IGNORECASE)
+                    year = None
+                    if date_match:
+                        try:
+                            year = int(date_match.group(2))
+                        except (ValueError, TypeError):
+                            pass
+
+                    # Label - Bandcamp shows label in "credits" section
+                    label_match = re.search(r'<a[^>]*href="https://([^"]+)\.bandcamp\.com"[^>]*>([^<]+)</a>\s*</p>', album_html)
+                    label = None
+                    if label_match:
+                        potential_label = label_match.group(2).strip()
+                        # Check if it's not the artist name
+                        if potential_label.lower() != (found_artist or "").lower():
+                            label = potential_label
+
+                    # Also try to find label from page title or meta
+                    if not label:
+                        label_meta = re.search(r'"recordLabel"\s*:\s*"([^"]+)"', album_html)
+                        if label_meta:
+                            label = label_meta.group(1)
+
+                    # Extract label from subdomain if it differs from artist
+                    subdomain_match = re.search(r'https://([^.]+)\.bandcamp\.com', album_url)
+                    if subdomain_match and not label:
+                        subdomain = subdomain_match.group(1)
+                        # If subdomain differs significantly from artist, it might be a label
+                        if text_similarity(subdomain.replace("-", " "), found_artist or "") < 0.5:
+                            label = subdomain.replace("-", " ").title()
+
+                    if score > best_score:
+                        best_score = score
+                        best_result = {
+                            "title": found_title,
+                            "artist": found_artist,
+                            "album": found_album,
+                            "label": label,
+                            "year": year,
+                        }
+
+                except Exception as e:
+                    print(f"Bandcamp album fetch error: {e}")
+                    continue
+
+            if not best_result or best_score < 0.3:
+                return MetadataResult()
+
+            return MetadataResult(
+                title=best_result["title"],
+                artist=best_result["artist"],
+                album=best_result["album"],
+                label=best_result["label"],
+                year=best_result["year"],
+                confidence=best_score
+            )
+
+        except Exception as e:
+            print(f"Bandcamp query error: {e}")
+            return MetadataResult()
+
 
 def lookup_metadata(
     file_path: str,
     hint_artist: Optional[str] = None,
     hint_title: Optional[str] = None,
-    api_key: Optional[str] = None
+    api_key: Optional[str] = None,
+    discogs_token: Optional[str] = None
 ) -> MetadataResult:
     """
     Convenience function to look up metadata for a file.
+
+    Lookup chain:
+    1. AcoustID + MusicBrainz (audio fingerprint) - most reliable
+    2. Discogs search (artist + title) - fallback for niche tracks
+    3. Bandcamp search (artist + title) - fallback for very niche electronic releases
 
     Args:
         file_path: Path to audio file
         hint_artist: Artist name from filename (for better matching)
         hint_title: Title from filename (for better matching)
         api_key: AcoustID API key (optional, uses env var if not provided)
+        discogs_token: Discogs personal access token (optional, uses env var if not provided)
 
     Returns:
         MetadataResult with track metadata
     """
     try:
-        lookup = MetadataLookup(api_key)
+        lookup = MetadataLookup(api_key, discogs_token)
         return lookup.lookup(file_path, hint_artist, hint_title)
     except ValueError as e:
         print(f"Metadata lookup disabled: {e}")

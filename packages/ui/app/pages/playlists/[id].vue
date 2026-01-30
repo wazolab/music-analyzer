@@ -1,57 +1,61 @@
 <template>
-  <div class="playlist-detail">
-    <div v-if="pending" class="loading">Loading playlist...</div>
-    <div v-else-if="fetchError" class="error">{{ fetchError.data?.message || 'Failed to load playlist' }}</div>
-    <template v-else-if="playlist">
-      <div class="playlist-header">
-        <div class="playlist-info">
-          <NuxtLink to="/" class="back-link">&larr; Back to playlists</NuxtLink>
-          <h2>{{ playlist.name }}</h2>
-          <div class="meta">
-            <span>{{ playlist.track_count }} tracks</span>
-            <span class="separator">|</span>
-            <a :href="playlist.url" target="_blank" class="source-link">View source</a>
-            <span class="separator">|</span>
-            <ClientOnly><span>Updated {{ formatDate(playlist.updated_at) }}</span></ClientOnly>
+  <div class="playlist-detail" :class="{ 'has-player': currentTrack }">
+    <div class="playlist-content">
+      <div v-if="pending" class="loading">Loading playlist...</div>
+      <div v-else-if="fetchError" class="error">{{ fetchError.data?.message || 'Failed to load playlist' }}</div>
+      <template v-else-if="playlist">
+        <div class="playlist-header">
+          <div class="playlist-info">
+            <NuxtLink to="/" class="back-link">&larr; Back to playlists</NuxtLink>
+            <h2>{{ playlist.name }}</h2>
+            <div class="meta">
+              <span>{{ playlist.track_count }} tracks</span>
+              <span class="separator">|</span>
+              <a :href="playlist.url" target="_blank" class="source-link">View source</a>
+              <span class="separator">|</span>
+              <ClientOnly><span>Updated {{ formatDate(playlist.updated_at) }}</span></ClientOnly>
+            </div>
           </div>
+          <button @click="syncPlaylist" :disabled="syncing" class="sync-btn">
+            {{ syncing ? 'Syncing...' : 'Re-sync' }}
+          </button>
         </div>
-        <button @click="syncPlaylist" :disabled="syncing" class="sync-btn">
-          {{ syncing ? 'Syncing...' : 'Re-sync' }}
-        </button>
-      </div>
 
-      <div v-if="error" class="error">{{ error }}</div>
+        <div v-if="error" class="error">{{ error }}</div>
 
-      <div class="tracks-list">
-        <TrackRow
-          v-for="(track, index) in playlist.tracks"
-          :key="track.id"
-          :track="track"
-          :index="index + 1"
-          :in-prep="prepTrackIds.has(track.id)"
-          :is-playing="currentTrack?.id === track.id"
-          @toggle-prep="handleTogglePrep"
-          @toggle-play="handleTogglePlay"
-        />
-      </div>
-
-      <!-- Audio Player -->
-      <div v-if="currentTrack" class="audio-player">
-        <div class="player-info">
-          <span class="player-artist">{{ currentTrack.artist }}</span>
-          <span class="player-separator">-</span>
-          <span class="player-title">{{ currentTrack.title }}</span>
+        <div class="tracks-list">
+          <TrackRow
+            v-for="(track, index) in playlist.tracks"
+            :key="track.id"
+            :track="track"
+            :index="index + 1"
+            :in-prep="prepTrackIds.has(track.id)"
+            :is-playing="currentTrack?.id === track.id"
+            @toggle-prep="handleTogglePrep"
+            @toggle-play="handleTogglePlay"
+          />
         </div>
+      </template>
+    </div>
+
+    <!-- Audio Player (Right Panel) -->
+    <aside v-if="currentTrack" class="player-panel">
+      <div class="player-header">
+        <span class="player-label">Now Playing</span>
         <button class="player-close" @click="stopPlayback">✕</button>
-        <iframe
-          v-if="embedUrl"
-          :src="embedUrl"
-          class="player-embed"
-          allow="autoplay"
-          frameborder="0"
-        ></iframe>
       </div>
-    </template>
+      <div class="player-info">
+        <div class="player-artist">{{ currentTrack.artist }}</div>
+        <div class="player-title">{{ currentTrack.title }}</div>
+      </div>
+      <iframe
+        v-if="embedUrl"
+        :src="embedUrl"
+        class="player-embed"
+        allow="autoplay"
+        frameborder="0"
+      ></iframe>
+    </aside>
   </div>
 </template>
 
@@ -172,8 +176,15 @@ function stopPlayback() {
 <style scoped>
 .playlist-detail {
   display: flex;
+  gap: 24px;
+}
+
+.playlist-content {
+  flex: 1;
+  display: flex;
   flex-direction: column;
   gap: 24px;
+  min-width: 0;
 }
 
 .loading {
@@ -256,38 +267,32 @@ h2 {
   padding: 40px;
 }
 
-.audio-player {
-  position: fixed;
-  bottom: 0;
-  left: 240px;
-  right: 0;
+/* Right Panel Player */
+.player-panel {
+  width: 320px;
+  flex-shrink: 0;
   background: #16213e;
-  border-top: 1px solid #333;
-  padding: 12px 20px;
+  border-radius: 12px;
+  padding: 20px;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 16px;
-  z-index: 100;
+  height: fit-content;
+  position: sticky;
+  top: 30px;
 }
 
-.player-info {
+.player-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  min-width: 200px;
 }
 
-.player-artist {
-  color: #00dc82;
-  font-weight: 500;
-}
-
-.player-separator {
+.player-label {
   color: #666;
-}
-
-.player-title {
-  color: #eee;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .player-close {
@@ -302,10 +307,24 @@ h2 {
   color: #fff;
 }
 
+.player-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.player-artist {
+  color: #00dc82;
+  font-weight: 500;
+}
+
+.player-title {
+  color: #eee;
+}
+
 .player-embed {
-  flex: 1;
-  height: 80px;
+  width: 100%;
+  height: 166px;
   border-radius: 8px;
-  max-width: 500px;
 }
 </style>

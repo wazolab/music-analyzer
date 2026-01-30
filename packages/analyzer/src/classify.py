@@ -26,6 +26,7 @@ from analyzers import (
     lookup_metadata,
 )
 from utils import parse_filename, find_audio_files
+from converter import needs_conversion, convert_to_flac
 
 
 @dataclass
@@ -52,10 +53,17 @@ class AnalysisResult:
 class AudioAnalyzer:
     """Main analyzer orchestrating all analysis modules."""
 
-    def __init__(self, verbose: bool = True, write_tags: bool = False, metadata_lookup: bool = False):
+    def __init__(
+        self,
+        verbose: bool = True,
+        write_tags: bool = False,
+        metadata_lookup: bool = False,
+        convert_to_flac: bool = False
+    ):
         self.verbose = verbose
         self.write_tags = write_tags
         self.metadata_lookup = metadata_lookup
+        self.convert_to_flac_enabled = convert_to_flac
         self.rhythm = RhythmAnalyzer()
         self.key = KeyAnalyzer()
         self.energy = EnergyAnalyzer()
@@ -82,6 +90,17 @@ class AudioAnalyzer:
         filename = os.path.basename(file_path)
         self._log(f"\nAnalyzing: {filename}")
         self._log("=" * 50)
+
+        # Convert to FLAC if enabled and needed
+        if self.convert_to_flac_enabled and needs_conversion(file_path):
+            self._log("Converting to FLAC...")
+            new_path, success = convert_to_flac(file_path, delete_original=True, verbose=self.verbose)
+            if success and new_path != file_path:
+                file_path = new_path
+                filename = os.path.basename(file_path)
+                self._log(f"✔ Now analyzing: {filename}")
+            elif not success:
+                self._log("⚠ Conversion failed, analyzing original format")
 
         # Parse track info from filename
         track_info = parse_filename(filename)
@@ -113,14 +132,22 @@ class AudioAnalyzer:
         self._log(f"\nTop 10 genres:")
         self._log(self.genre.format_predictions(genre_result))
 
-        # Correct half-time BPM for fast-tempo genres
+        # Correct BPM based on genre expectations
         bpm = rhythm_result.bpm
-        fast_genres = {"Juke", "Jungle", "Drum n Bass", "Footwork", "Breakcore", "Hardcore"}
         detected_subgenres = {g.split("---")[1] if "---" in g else g for g in genre_result.top_genres[:3]}
+        primary_subgenre = genre_result.top_genres[0].split("---")[1] if "---" in genre_result.top_genres[0] else genre_result.top_genres[0]
 
-        if detected_subgenres & fast_genres and bpm < 100:
+        # Fast genres: double BPM if detected < 100 (half-time detection)
+        fast_genres = {"Juke", "Jungle", "Drum n Bass", "Footwork", "Breakcore", "Hardcore"}
+        if detected_subgenres & fast_genres and bpm < 100 and primary_subgenre != "Halftime":
             bpm = bpm * 2
             self._log(f"Corrected half-time BPM: {rhythm_result.bpm} -> {bpm}")
+
+        # Slow genres: halve BPM if detected > 130 (double-time detection)
+        slow_genres = {"Dubstep", "Downtempo", "Ambient", "Chillwave", "Trip Hop", "Dub"}
+        if primary_subgenre in slow_genres and bpm > 130:
+            bpm = bpm // 2
+            self._log(f"Corrected double-time BPM: {rhythm_result.bpm} -> {bpm}")
 
         # Metadata lookup via AcoustID + MusicBrainz
         artist = track_info.artist
@@ -130,10 +157,19 @@ class AudioAnalyzer:
         year = None
 
         if self.metadata_lookup:
-            self._log("Looking up metadata via AcoustID...")
+            self._log("Looking up metadata...")
             metadata = lookup_metadata(file_path, hint_artist=track_info.artist, hint_title=track_info.title)
-            if metadata.musicbrainz_id:
-                self._log(f"Found match (confidence: {metadata.confidence:.0%})")
+            if metadata.title:
+                # Determine source based on what fields are set
+                if metadata.musicbrainz_id:
+                    source = "MusicBrainz"
+                elif metadata.confidence > 0 and metadata.confidence < 1:
+                    # Discogs and Bandcamp use text similarity scores < 1.0
+                    # Check if label looks like a Bandcamp subdomain pattern
+                    source = "Discogs/Bandcamp"
+                else:
+                    source = "Discogs"
+                self._log(f"Found match via {source} (confidence: {metadata.confidence:.0%})")
                 if metadata.artist:
                     artist = metadata.artist
                     self._log(f"  Artist: {artist}")
@@ -150,7 +186,7 @@ class AudioAnalyzer:
                     year = metadata.year
                     self._log(f"  Year: {year}")
             else:
-                self._log("No match found in MusicBrainz")
+                self._log("No match found in MusicBrainz, Discogs, or Bandcamp")
 
         # Build result
         result = AnalysisResult(
@@ -178,6 +214,12 @@ class AudioAnalyzer:
             )
             if self.tagger.write(file_path, tag_data):
                 self._log("✔ Tags written successfully")
+                written = self.tagger.read_existing(file_path)
+                self._log(f"\nFile tags:")
+                self._log(f"  BPM: {written.bpm}")
+                self._log(f"  KEY: {written.key}")
+                self._log(f"  ENERGY: {written.energy}")
+                self._log(f"  GENRE: {written.genres}")
             else:
                 self._log("✗ Failed to write tags")
 
@@ -255,6 +297,11 @@ def main():
         action="store_true",
         help="Look up metadata via AcoustID + MusicBrainz (requires ACOUSTID_API_KEY)"
     )
+    parser.add_argument(
+        "-c", "--convert",
+        action="store_true",
+        help="Convert non-FLAC files to FLAC before analysis (requires ffmpeg)"
+    )
 
     args = parser.parse_args()
 
@@ -266,7 +313,8 @@ def main():
     analyzer = AudioAnalyzer(
         verbose=not args.quiet,
         write_tags=args.write_tags,
-        metadata_lookup=args.lookup
+        metadata_lookup=args.lookup,
+        convert_to_flac=args.convert
     )
     analyzer.load_models()
 

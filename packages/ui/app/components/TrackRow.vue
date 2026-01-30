@@ -32,7 +32,7 @@
     <span class="track-separator">-</span>
     <span class="track-title">{{ track.title }}</span>
     <span v-if="topGenre" class="track-genre">{{ topGenre }}</span>
-    <span v-if="track.bpm" class="track-bpm">{{ Math.round(track.bpm) }}</span>
+    <span v-if="track.bpm" class="track-bpm">{{ Math.round(track.bpm) }} BPM</span>
     <span v-if="track.key_notation" class="track-key">{{ track.key_notation }}</span>
     <span v-if="track.duration" class="track-duration">{{ formatDuration(track.duration) }}</span>
   </div>

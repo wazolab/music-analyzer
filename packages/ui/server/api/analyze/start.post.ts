@@ -49,13 +49,14 @@ export default defineEventHandler(async (event) => {
   }
 
   // Start the analyzer via docker run
-  // Mount as read-write to allow tag writing
+  // Mount as read-write to allow tag writing and FLAC conversion
   const args = [
     'run', '--rm',
     '--name', `analyzer-job-${job.id}`,
     '-v', `${hostDownloadsDir}:/input`,
     'music-analyzer',
     '--write-tags',
+    '--convert',  // Convert non-FLAC to FLAC for library integrity
     '/input'
   ]
 

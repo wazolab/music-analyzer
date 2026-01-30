@@ -73,7 +73,14 @@ def find_audio_files(directory: Path, recursive: bool = True) -> list[Path]:
     Returns:
         List of audio file paths
     """
-    extensions = ["*.flac", "*.mp3", "*.wav", "*.aiff", "*.m4a", "*.ogg"]
+    # Include all formats: FLAC (native) + convertible formats
+    extensions = [
+        "*.flac",  # Native format
+        "*.mp3", "*.m4a", "*.aac",  # Lossy compressed
+        "*.wav", "*.aiff",  # Lossless uncompressed
+        "*.ogg", "*.opus",  # Lossy (Vorbis/Opus)
+        "*.wma",  # Windows Media
+    ]
     pattern = "**/*" if recursive else "*"
 
     files = []

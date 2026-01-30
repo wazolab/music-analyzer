@@ -29,6 +29,7 @@ RUN curl -L -o models/genre_discogs400-discogs-effnet-1.json \
 # Copy source files
 COPY src/analyzers/ ./analyzers/
 COPY src/utils.py ./
+COPY src/converter.py ./
 COPY src/classify.py ./
 
 ENTRYPOINT ["python3", "classify.py"]
