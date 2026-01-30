@@ -1,115 +1,127 @@
 <template>
-  <div class="preparation-page">
-    <header class="page-header">
-      <h1>DJ Prep List</h1>
-      <button
-        v-if="prepList.length > 0"
-        class="clear-btn"
-        :disabled="clearing"
-        @click="clearList"
-      >
-        {{ clearing ? 'Clearing...' : 'Clear All' }}
-      </button>
-    </header>
-
-    <div
-      v-if="pending"
-      class="loading"
-    >
-      Loading preparation list...
-    </div>
-    <div
-      v-else-if="prepList.length === 0"
-      class="empty"
-    >
-      <p>No tracks in your prep list yet.</p>
-      <p class="hint">
-        Browse playlists and click the + button to add tracks.
-      </p>
-    </div>
-    <div
-      v-else
-      class="prep-list"
-    >
-      <div class="prep-stats">
-        {{ prepList.length }} tracks selected for preparation
-      </div>
-
-      <div class="tracks-list">
-        <div
-          v-for="track in prepList"
-          :key="track.id"
-          class="prep-track"
+  <div class="flex gap-6">
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col gap-6 min-w-0">
+      <!-- Header -->
+      <div class="flex justify-between items-center">
+        <h1 class="text-3xl font-bold">DJ Prep List</h1>
+        <UButton
+          v-if="prepList.length > 0"
+          icon="i-lucide-trash-2"
+          color="error"
+          variant="soft"
+          :loading="clearing"
+          @click="clearList"
         >
-          <div class="track-actions">
-            <button
-              v-if="track.source_url"
-              class="action-btn play-btn"
-              :class="{ playing: currentTrack?.track_id === track.track_id }"
-              :title="currentTrack?.track_id === track.track_id ? 'Stop' : 'Play'"
-              @click="togglePlay(track)"
-            >
-              {{ currentTrack?.track_id === track.track_id ? '⏹' : '▶' }}
-            </button>
-            <button
-              class="action-btn copy-btn"
-              :class="{ copied: copiedTrackId === track.track_id }"
-              title="Copy for Soulseek search"
-              @click="copySearchText(track)"
-            >
-              {{ copiedTrackId === track.track_id ? '✓' : '⎘' }}
-            </button>
-            <button
-              class="action-btn remove-btn"
-              title="Remove from Prep"
-              @click="removeTrack(track.track_id)"
-            >
-              ✕
-            </button>
-          </div>
-          <span class="track-artist">{{ track.artist }}</span>
-          <span class="track-separator">-</span>
-          <span class="track-title">{{ track.title }}</span>
-          <span
-            v-if="track.bpm"
-            class="track-bpm"
-          >{{ Math.round(track.bpm) }} BPM</span>
-          <span
-            v-if="track.key_notation"
-            class="track-key"
-          >{{ track.key_notation }}</span>
-          <span
-            v-if="track.duration"
-            class="track-duration"
-          >{{ formatDuration(track.duration) }}</span>
-        </div>
+          Clear All
+        </UButton>
       </div>
+
+      <!-- Loading/Empty states -->
+      <div v-if="pending" class="text-muted text-center py-16">
+        Loading preparation list...
+      </div>
+      <UCard v-else-if="prepList.length === 0" class="text-center">
+        <UIcon name="i-lucide-headphones" class="size-12 text-muted mx-auto mb-4" />
+        <p class="text-muted mb-2">No tracks in your prep list yet.</p>
+        <p class="text-sm text-muted">Browse playlists and click the + button to add tracks.</p>
+      </UCard>
+
+      <!-- Prep List -->
+      <template v-else>
+        <div class="flex items-center gap-2">
+          <UBadge color="primary" variant="subtle">{{ prepList.length }} tracks</UBadge>
+          <span class="text-sm text-muted">selected for preparation</span>
+        </div>
+
+        <UCard :ui="{ body: 'p-0' }">
+          <div class="divide-y divide-default">
+            <div
+              v-for="track in prepList"
+              :key="track.id"
+              class="flex items-center gap-3 py-4 px-5"
+              :class="{ 'bg-primary/5 border-l-4 border-l-primary': currentTrack?.track_id === track.track_id }"
+            >
+              <!-- Actions -->
+              <div class="flex gap-1.5">
+                <UButton
+                  v-if="track.source_url"
+                  :icon="currentTrack?.track_id === track.track_id ? 'i-lucide-square' : 'i-lucide-play'"
+                  size="sm"
+                  :color="currentTrack?.track_id === track.track_id ? 'primary' : 'neutral'"
+                  :variant="currentTrack?.track_id === track.track_id ? 'solid' : 'ghost'"
+                  :title="currentTrack?.track_id === track.track_id ? 'Stop' : 'Play'"
+                  @click="togglePlay(track)"
+                />
+                <UButton
+                  :icon="copiedTrackId === track.track_id ? 'i-lucide-check' : 'i-lucide-copy'"
+                  size="sm"
+                  :color="copiedTrackId === track.track_id ? 'success' : 'neutral'"
+                  :variant="copiedTrackId === track.track_id ? 'solid' : 'ghost'"
+                  title="Copy for Soulseek search"
+                  @click="copySearchText(track)"
+                />
+                <UButton
+                  icon="i-lucide-x"
+                  size="sm"
+                  color="error"
+                  variant="ghost"
+                  title="Remove from Prep"
+                  @click="removeTrack(track.track_id)"
+                />
+              </div>
+
+              <!-- Track info -->
+              <span class="text-primary font-semibold text-base">{{ track.artist }}</span>
+              <span class="text-muted text-base">-</span>
+              <span class="flex-1 truncate text-base">{{ track.title }}</span>
+
+              <!-- Badges -->
+              <UBadge v-if="track.bpm" color="warning" variant="subtle">
+                {{ Math.round(track.bpm) }} BPM
+              </UBadge>
+              <UBadge v-if="track.key_notation" color="primary" variant="subtle" class="min-w-8 text-center">
+                {{ track.key_notation }}
+              </UBadge>
+              <span v-if="track.duration" class="text-muted min-w-12 text-right">
+                {{ formatDuration(track.duration) }}
+              </span>
+            </div>
+          </div>
+        </UCard>
+      </template>
     </div>
 
-    <!-- Audio Player -->
-    <div
-      v-if="currentTrack"
-      class="audio-player"
-    >
-      <div class="player-info">
-        <span class="player-artist">{{ currentTrack.artist }}</span>
-        <span class="player-separator">-</span>
-        <span class="player-title">{{ currentTrack.title }}</span>
-      </div>
-      <button
-        class="player-close"
-        @click="stopPlayback"
-      >
-        ✕
-      </button>
-      <iframe
-        v-if="embedUrl"
-        :src="embedUrl"
-        class="player-embed"
-        allow="autoplay"
-        frameborder="0"
-      />
-    </div>
+    <!-- Right Panel Player -->
+    <aside v-if="currentTrack" class="w-80 shrink-0">
+      <UCard class="sticky top-8">
+        <template #header>
+          <div class="flex justify-between items-center">
+            <span class="text-muted text-xs uppercase tracking-wide">Now Playing</span>
+            <UButton
+              icon="i-lucide-x"
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              @click="stopPlayback"
+            />
+          </div>
+        </template>
+        <div class="space-y-4">
+          <div>
+            <div class="text-primary font-medium">{{ currentTrack.artist }}</div>
+            <div>{{ currentTrack.title }}</div>
+          </div>
+          <iframe
+            v-if="embedUrl"
+            :src="embedUrl"
+            class="w-full h-42 rounded-lg"
+            allow="autoplay"
+            frameborder="0"
+          />
+        </div>
+      </UCard>
+    </aside>
   </div>
 </template>
 
@@ -210,210 +222,3 @@ async function clearList() {
   clearing.value = false
 }
 </script>
-
-<style scoped>
-.preparation-page {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.page-header h1 {
-  font-size: 1.8rem;
-  color: #eee;
-}
-
-.clear-btn {
-  padding: 10px 20px;
-  background: #ff4757;
-  color: #fff;
-}
-
-.clear-btn:hover {
-  opacity: 0.9;
-}
-
-.loading, .empty {
-  color: #666;
-  text-align: center;
-  padding: 60px 20px;
-}
-
-.empty p {
-  margin-bottom: 8px;
-}
-
-.hint {
-  font-size: 0.9rem;
-  color: #555;
-}
-
-.prep-stats {
-  color: #888;
-  font-size: 0.9rem;
-  margin-bottom: 16px;
-}
-
-.tracks-list {
-  background: #16213e;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.prep-track {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  border-bottom: 1px solid #2a2a4a;
-}
-
-.prep-track:last-child {
-  border-bottom: none;
-}
-
-.track-actions {
-  display: flex;
-  gap: 4px;
-}
-
-.action-btn {
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 50%;
-  background: #1a1a2e;
-  color: #888;
-  font-size: 0.75rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-}
-
-.action-btn:hover {
-  background: #2a2a4a;
-  color: #eee;
-}
-
-.play-btn:hover,
-.play-btn.playing {
-  background: #00dc82;
-  color: #1a1a2e;
-}
-
-.copy-btn:hover {
-  background: #3498db;
-  color: #fff;
-}
-
-.copy-btn.copied {
-  background: #00dc82;
-  color: #1a1a2e;
-}
-
-.remove-btn:hover {
-  background: #ff4757;
-  color: #fff;
-}
-
-.track-artist {
-  color: #00dc82;
-  font-weight: 500;
-}
-
-.track-separator {
-  color: #666;
-}
-
-.track-title {
-  color: #eee;
-  flex: 1;
-}
-
-.track-bpm {
-  color: #ffa502;
-  font-size: 0.8rem;
-  padding: 2px 6px;
-  background: rgba(255, 165, 2, 0.15);
-  border-radius: 4px;
-}
-
-.track-key {
-  color: #00dc82;
-  font-size: 0.8rem;
-  padding: 2px 6px;
-  background: rgba(0, 220, 130, 0.15);
-  border-radius: 4px;
-  min-width: 28px;
-  text-align: center;
-}
-
-.track-duration {
-  color: #666;
-  font-size: 0.85rem;
-  min-width: 45px;
-  text-align: right;
-}
-
-.audio-player {
-  position: fixed;
-  bottom: 0;
-  left: 240px;
-  right: 0;
-  background: #16213e;
-  border-top: 1px solid #333;
-  padding: 12px 20px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  z-index: 100;
-}
-
-.player-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 200px;
-}
-
-.player-artist {
-  color: #00dc82;
-  font-weight: 500;
-}
-
-.player-separator {
-  color: #666;
-}
-
-.player-title {
-  color: #eee;
-}
-
-.player-close {
-  padding: 6px 10px;
-  background: #333;
-  color: #888;
-  font-size: 0.85rem;
-}
-
-.player-close:hover {
-  background: #ff4757;
-  color: #fff;
-}
-
-.player-embed {
-  flex: 1;
-  height: 80px;
-  border-radius: 8px;
-  max-width: 500px;
-}
-</style>

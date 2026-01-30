@@ -4,11 +4,25 @@ export default defineNuxtConfig({
   modules: ['@nuxt/ui', '@nuxt/eslint'],
   devtools: { enabled: true },
 
+  css: ['~/assets/css/main.css'],
+
   app: {
     head: {
       titleTemplate: '%s - Music Pipeline',
     },
   },
+
+  colorMode: {
+    preference: 'dark',
+    fallback: 'dark',
+  },
+
+  ui: {
+    theme: {
+      colors: ['primary', 'secondary', 'success', 'info', 'warning', 'error', 'neutral'],
+    },
+  },
+
   compatibilityDate: '2025-07-15',
 
   eslint: {

@@ -1,695 +1,318 @@
 <template>
-  <div class="library-page">
-    <header class="page-header">
-      <h1>Library</h1>
-      <div class="header-actions">
-        <button
-          :disabled="scanningDownloads"
-          class="scan-downloads-btn"
-          @click="scanDownloads"
-        >
-          {{ scanningDownloads ? 'Scanning...' : 'Scan Downloads' }}
-        </button>
-        <button
-          class="scan-btn"
-          @click="openScanModal"
-        >
+  <div class="flex flex-col gap-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center flex-wrap gap-4">
+      <h1 class="text-3xl font-bold">Library</h1>
+      <div class="flex gap-2">
+        <UButton icon="i-lucide-folder-search" :loading="scanningDownloads" @click="scanDownloads">
+          Scan Downloads
+        </UButton>
+        <UButton icon="i-lucide-hard-drive" color="neutral" variant="soft" @click="openScanModal">
           Scan External
-        </button>
-        <button
-          :disabled="refreshing"
-          class="refresh-btn"
-          @click="refreshLibrary"
-        >
-          {{ refreshing ? 'Loading...' : 'Refresh' }}
-        </button>
-      </div>
-    </header>
-
-    <!-- Stats Bar -->
-    <div
-      v-if="stats"
-      class="stats-bar"
-    >
-      <div class="stats-info">
-        <div class="stat">
-          <span class="stat-value">{{ stats.total }}</span>
-          <span class="stat-label">Tracks</span>
-        </div>
-        <div class="stat">
-          <span class="stat-value">{{ stats.byGenre?.length || 0 }}</span>
-          <span class="stat-label">Genres</span>
-        </div>
-        <div class="stat">
-          <span class="stat-value">{{ stats.byLabel?.length || 0 }}</span>
-          <span class="stat-label">Labels</span>
-        </div>
-        <div class="stat">
-          <span
-            class="stat-value"
-            :class="{ offline: offlineCount > 0 }"
-          >{{ offlineCount }}</span>
-          <span class="stat-label">Offline</span>
-        </div>
-        <div
-          class="stat"
-          title="Tracks not linked to AcoustID/MusicBrainz"
-        >
-          <span
-            class="stat-value"
-            :class="{ 'not-in-acoustid': notInAcoustidCount > 0 }"
-          >
-            <span class="no-acoustid-icon stat-icon">?</span>
-            {{ notInAcoustidCount }}
-          </span>
-          <span class="stat-label">Not in AcoustID</span>
-        </div>
-      </div>
-      <div
-        v-if="selectedTracks.size > 0"
-        class="selection-actions"
-      >
-        <span class="selection-count">{{ selectedTracks.size }} selected</span>
-        <button
-          v-if="singleSelectedTrack"
-          class="musicbrainz-btn"
-          @click="openMusicBrainzModal(singleSelectedTrack)"
-        >
-          Link to MusicBrainz
-        </button>
-        <button
-          :disabled="analyzing"
-          class="reanalyze-btn"
-          @click="reanalyzeSelected"
-        >
-          {{ analyzing ? 'Analyzing...' : 'Re-analyze' }}
-        </button>
-        <button
-          class="publish-btn"
-          @click="showPublishModal = true"
-        >
-          Publish to Drive
-        </button>
+        </UButton>
+        <UButton icon="i-lucide-refresh-cw" color="neutral" variant="ghost" :loading="refreshing" @click="refreshLibrary" />
       </div>
     </div>
 
-    <!-- Pending Section (collapsible) -->
-    <section
-      v-if="pendingTracks.length > 0"
-      class="pending-section"
-    >
-      <div
-        class="pending-header"
-        @click="showPending = !showPending"
-      >
-        <h2>
-          <span class="collapse-icon">{{ showPending ? '−' : '+' }}</span>
-          Pending Analysis ({{ pendingTracks.length }})
-        </h2>
-        <span
-          v-if="!showPending"
-          class="pending-hint"
-        >Click to expand</span>
-      </div>
+    <!-- Stats Bar -->
+    <div v-if="stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      <UCard :ui="{ body: 'p-4 text-center' }">
+        <div class="text-3xl font-bold text-primary">{{ stats.total }}</div>
+        <div class="text-sm text-muted">Tracks</div>
+      </UCard>
+      <UCard :ui="{ body: 'p-4 text-center' }">
+        <div class="text-3xl font-bold text-primary">{{ stats.byGenre?.length || 0 }}</div>
+        <div class="text-sm text-muted">Genres</div>
+      </UCard>
+      <UCard :ui="{ body: 'p-4 text-center' }">
+        <div class="text-3xl font-bold text-primary">{{ stats.byLabel?.length || 0 }}</div>
+        <div class="text-sm text-muted">Labels</div>
+      </UCard>
+      <UCard :ui="{ body: 'p-4 text-center' }">
+        <div class="text-3xl font-bold" :class="offlineCount > 0 ? 'text-error' : 'text-primary'">{{ offlineCount }}</div>
+        <div class="text-sm text-muted">Offline</div>
+      </UCard>
+      <UCard :ui="{ body: 'p-4 text-center' }" title="Tracks not linked to AcoustID">
+        <div class="text-3xl font-bold" :class="notInAcoustidCount > 0 ? 'text-warning' : 'text-primary'">{{ notInAcoustidCount }}</div>
+        <div class="text-sm text-muted">Not in AcoustID</div>
+      </UCard>
+    </div>
 
-      <div
-        v-if="showPending"
-        class="pending-content"
-      >
-        <div class="selection-bar">
-          <label class="select-all">
-            <input
-              v-model="selectAllPending"
-              type="checkbox"
-              @change="toggleSelectAllPending"
-            >
-            Select all ({{ selectedPending.size }}/{{ pendingTracks.length }})
-          </label>
-          <div class="pending-actions">
-            <button
-              v-if="selectedPending.size > 0"
-              :disabled="deleting"
-              class="delete-btn"
-              @click="deleteSelectedPending"
-            >
-              {{ deleting ? 'Deleting...' : `Delete ${selectedPending.size}` }}
-            </button>
-            <button
-              v-if="selectedPending.size > 0"
-              :disabled="analyzing"
-              class="analyze-btn"
-              @click="analyzeSelected"
-            >
-              {{ analyzing ? 'Analyzing...' : `Analyze ${selectedPending.size}` }}
-            </button>
+    <!-- Pending Section -->
+    <UCard v-if="pendingTracks.length > 0" :ui="{ body: 'p-0' }">
+      <template #header>
+        <button class="flex w-full justify-between items-center" @click="showPending = !showPending">
+          <div class="flex items-center gap-2">
+            <UIcon :name="showPending ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" class="size-4" />
+            <span class="font-semibold text-warning">Pending Analysis</span>
+            <UBadge color="warning" variant="subtle">{{ pendingTracks.length }}</UBadge>
+          </div>
+          <span v-if="!showPending" class="text-sm text-muted">Click to expand</span>
+        </button>
+      </template>
+      <div v-if="showPending" class="p-4 space-y-3">
+        <div class="flex justify-between items-center flex-wrap gap-3">
+          <UCheckbox v-model="selectAllPending" :label="`Select all (${selectedPending.size}/${pendingTracks.length})`" @change="toggleSelectAllPending" />
+          <div class="flex gap-2">
+            <UButton v-if="selectedPending.size > 0" color="error" variant="soft" size="sm" :loading="deleting" @click="deleteSelectedPending">
+              Delete {{ selectedPending.size }}
+            </UButton>
+            <UButton v-if="selectedPending.size > 0" size="sm" :loading="analyzing" @click="analyzeSelected">
+              Analyze {{ selectedPending.size }}
+            </UButton>
           </div>
         </div>
-
-        <div class="pending-list">
+        <div class="max-h-72 overflow-y-auto rounded-lg border border-default">
           <div
             v-for="track in pendingTracks"
             :key="track.id"
-            class="pending-item"
-            :class="{ selected: selectedPending.has(track.id) }"
+            class="flex items-center gap-3 px-4 py-2.5 border-b border-default last:border-b-0 cursor-pointer hover:bg-elevated/50"
+            :class="{ 'bg-elevated': selectedPending.has(track.id) }"
             @click="togglePendingSelect(track.id)"
           >
-            <input
-              type="checkbox"
-              :checked="selectedPending.has(track.id)"
-              @click.stop="togglePendingSelect(track.id)"
-            >
-            <span class="pending-filename">{{ getFilename(track.file_path) }}</span>
-            <span class="pending-source badge">{{ track.source || 'downloads' }}</span>
-            <span
-              v-if="track.analysis_status === 'failed'"
-              class="pending-status badge failed"
-            >failed</span>
-            <span
-              v-else-if="track.analysis_status === 'analyzing'"
-              class="pending-status badge analyzing"
-            >analyzing</span>
+            <UCheckbox :model-value="selectedPending.has(track.id)" @click.stop @update:model-value="togglePendingSelect(track.id)" />
+            <span class="flex-1 text-sm truncate">{{ getFilename(track.file_path) }}</span>
+            <UBadge color="neutral" variant="subtle" size="xs">{{ track.source || 'downloads' }}</UBadge>
+            <UBadge v-if="track.analysis_status === 'failed'" color="error" variant="subtle" size="xs">failed</UBadge>
+            <UBadge v-else-if="track.analysis_status === 'analyzing'" color="warning" variant="subtle" size="xs">analyzing</UBadge>
           </div>
         </div>
       </div>
-    </section>
+    </UCard>
+
+    <!-- Selection Actions -->
+    <UCard v-if="selectedTracks.size > 0" color="primary" variant="subtle" :ui="{ body: 'py-3 px-4' }">
+      <div class="flex items-center justify-between gap-4 flex-wrap">
+        <span class="text-sm">{{ selectedTracks.size }} track(s) selected</span>
+        <div class="flex gap-2">
+          <UButton v-if="singleSelectedTrack" size="sm" color="warning" variant="soft" @click="openMusicBrainzModal(singleSelectedTrack)">
+            Link to MusicBrainz
+          </UButton>
+          <UButton size="sm" color="neutral" variant="soft" :loading="analyzing" @click="reanalyzeSelected">
+            Re-analyze
+          </UButton>
+          <UButton size="sm" @click="showPublishModal = true">
+            Publish to Drive
+          </UButton>
+        </div>
+      </div>
+    </UCard>
 
     <!-- Filters -->
-    <div class="filters">
-      <input
-        v-model="searchQuery"
-        type="text"
-        placeholder="Search artist, title, album..."
-        class="search-input"
-      >
-      <select
-        v-model="filterGenre"
-        class="filter-select"
-        :disabled="uniqueGenres.length === 0"
-      >
-        <option value="">
-          {{ uniqueGenres.length === 0 ? 'No Genres' : 'All Genres' }}
-        </option>
-        <option
-          v-for="g in uniqueGenres"
-          :key="g"
-          :value="g"
-        >
-          {{ g }}
-        </option>
+    <div class="flex gap-3 flex-wrap">
+      <UInput v-model="searchQuery" placeholder="Search artist, title, album..." icon="i-lucide-search" class="flex-1 min-w-48" />
+      <select v-model="filterGenre" :disabled="uniqueGenres.length === 0" class="w-40 px-3 py-2 rounded-md bg-elevated border border-default text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50">
+        <option value="">{{ uniqueGenres.length === 0 ? 'No Genres' : 'All Genres' }}</option>
+        <option v-for="g in uniqueGenres" :key="g" :value="g">{{ g }}</option>
       </select>
-      <select
-        v-model="filterLabel"
-        class="filter-select"
-        :disabled="uniqueLabels.length === 0"
-      >
-        <option value="">
-          {{ uniqueLabels.length === 0 ? 'No Labels' : 'All Labels' }}
-        </option>
-        <option
-          v-for="l in uniqueLabels"
-          :key="l"
-          :value="l"
-        >
-          {{ l }}
-        </option>
+      <select v-model="filterLabel" :disabled="uniqueLabels.length === 0" class="w-40 px-3 py-2 rounded-md bg-elevated border border-default text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50">
+        <option value="">{{ uniqueLabels.length === 0 ? 'No Labels' : 'All Labels' }}</option>
+        <option v-for="l in uniqueLabels" :key="l" :value="l">{{ l }}</option>
       </select>
-      <select
-        v-model="filterYear"
-        class="filter-select"
-        :disabled="uniqueYears.length === 0"
-      >
-        <option value="">
-          {{ uniqueYears.length === 0 ? 'No Years' : 'All Years' }}
-        </option>
-        <option
-          v-for="y in uniqueYears"
-          :key="y"
-          :value="y"
-        >
-          {{ y }}
-        </option>
+      <select v-model="filterYear" :disabled="uniqueYears.length === 0" class="w-32 px-3 py-2 rounded-md bg-elevated border border-default text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50">
+        <option value="">{{ uniqueYears.length === 0 ? 'No Years' : 'All Years' }}</option>
+        <option v-for="y in uniqueYears" :key="y" :value="y">{{ y }}</option>
       </select>
-      <select
-        v-model="filterStatus"
-        class="filter-select"
-      >
-        <option value="">
-          All Status
-        </option>
-        <option value="available">
-          Available
-        </option>
-        <option value="offline">
-          Offline
-        </option>
+      <select v-model="filterStatus" class="w-32 px-3 py-2 rounded-md bg-elevated border border-default text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+        <option value="">All Status</option>
+        <option value="available">Available</option>
+        <option value="offline">Offline</option>
       </select>
     </div>
 
     <!-- View Tabs -->
-    <div class="view-tabs">
-      <button
-        class="tab"
-        :class="{ active: viewMode === 'genre' }"
-        @click="viewMode = 'genre'"
-      >
-        By Genre
-      </button>
-      <button
-        class="tab"
-        :class="{ active: viewMode === 'label' }"
-        @click="viewMode = 'label'"
-      >
-        By Label
-      </button>
-      <button
-        class="tab"
-        :class="{ active: viewMode === 'year' }"
-        @click="viewMode = 'year'"
-      >
-        By Year
-      </button>
-      <button
-        class="tab"
-        :class="{ active: viewMode === 'list' }"
-        @click="viewMode = 'list'"
-      >
-        List
-      </button>
-      <span class="tab-separator" />
-      <button
-        class="tab filter-tab"
-        :class="{ active: filterMissingAcoustid }"
-        @click="filterMissingAcoustid = !filterMissingAcoustid"
-      >
-        <span class="no-acoustid-icon tab-icon">?</span>
-        Missing AcoustID
-        <span
-          v-if="notInAcoustidCount > 0"
-          class="tab-count"
-        >{{ notInAcoustidCount }}</span>
-      </button>
-    </div>
+    <UTabs v-model="viewMode" :items="viewTabs" :content="false" />
 
-    <div
-      v-if="pending"
-      class="loading"
-    >
-      Loading library...
-    </div>
+    <div v-if="pending" class="text-muted text-center py-16">Loading library...</div>
+
     <template v-else>
-      <div
-        v-if="filteredTracks.length === 0"
-        class="empty-section"
-      >
-        <p v-if="tracks.length === 0">
-          Your library is empty. Add tracks from the Analysis page or scan your external storage.
-        </p>
-        <p v-else>
-          No tracks match your filters.
-        </p>
-      </div>
+      <UCard v-if="filteredTracks.length === 0" class="text-center">
+        <p v-if="tracks.length === 0" class="text-muted">Your library is empty. Scan downloads or external storage.</p>
+        <p v-else class="text-muted">No tracks match your filters.</p>
+      </UCard>
 
-      <!-- Grid View (Genre/Label/Year) -->
-      <div
-        v-else-if="viewMode !== 'list'"
-        class="grid-view"
-      >
-        <div
-          v-for="group in groupedTracks"
-          :key="group.name"
-          class="group-card"
-        >
-          <div class="group-header">
-            <span class="group-name">{{ group.name || 'Unknown' }}</span>
-            <span class="group-count">{{ group.tracks.length }}</span>
-          </div>
-          <div class="group-tracks">
+      <!-- Grid View -->
+      <div v-else-if="viewMode !== 'list'" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <UCard v-for="group in groupedTracks" :key="group.name" :ui="{ body: 'p-0' }">
+          <template #header>
+            <div class="flex justify-between items-center">
+              <span class="font-semibold">{{ group.name || 'Unknown' }}</span>
+              <UBadge color="neutral" variant="subtle">{{ group.tracks.length }}</UBadge>
+            </div>
+          </template>
+          <div class="max-h-72 overflow-y-auto divide-y divide-default">
             <div
               v-for="track in group.tracks"
               :key="track.id"
-              class="track-item"
-              :class="{ offline: track.storage_status === 'offline', selected: selectedTracks.has(track.id) }"
+              class="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-elevated/50"
+              :class="{ 'opacity-60': track.storage_status === 'offline', 'bg-elevated': selectedTracks.has(track.id) }"
               @click="toggleTrackSelect(track.id)"
             >
-              <input
-                type="checkbox"
-                class="track-checkbox"
-                :checked="selectedTracks.has(track.id)"
-                @click.stop="toggleTrackSelect(track.id)"
-              >
-              <div class="track-info">
-                <span class="track-title">
-                  <span
-                    v-if="track.storage_status === 'offline'"
-                    class="offline-icon"
-                    title="File offline"
-                  >&#128274;</span>
-                  <span
-                    v-if="!track.musicbrainz_id"
-                    class="no-acoustid-icon"
-                    title="Not in AcoustID"
-                  >?</span>
-                  {{ track.artist || 'Unknown Artist' }} - {{ track.title || 'Unknown Title' }}
-                </span>
-                <span
-                  v-if="track.album"
-                  class="track-album"
-                >{{ track.album }}</span>
+              <UCheckbox :model-value="selectedTracks.has(track.id)" @click.stop @update:model-value="toggleTrackSelect(track.id)" />
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-1.5 truncate">
+                  <UIcon v-if="track.storage_status === 'offline'" name="i-lucide-cloud-off" class="size-4 text-error shrink-0" />
+                  <UIcon v-if="!track.musicbrainz_id" name="i-lucide-help-circle" class="size-4 text-warning shrink-0" />
+                  <span class="truncate">{{ track.artist || 'Unknown' }} - {{ track.title || 'Unknown' }}</span>
+                </div>
+                <div v-if="track.album" class="text-sm text-muted truncate">{{ track.album }}</div>
               </div>
-              <div class="track-badges">
-                <span
-                  v-if="track.bpm"
-                  class="badge bpm"
-                >{{ Math.round(track.bpm) }}</span>
-                <span
-                  v-if="track.key_notation"
-                  class="badge key"
-                >{{ track.key_notation }}</span>
-                <span
-                  v-if="track.energy"
-                  class="badge energy"
-                >E{{ track.energy }}</span>
+              <div class="flex gap-1.5 shrink-0">
+                <UBadge v-if="track.bpm" color="warning" variant="subtle">{{ Math.round(track.bpm) }}</UBadge>
+                <UBadge v-if="track.key_notation" color="primary" variant="subtle">{{ track.key_notation }}</UBadge>
+                <UBadge v-if="track.energy" color="info" variant="subtle">E{{ track.energy }}</UBadge>
               </div>
             </div>
           </div>
-        </div>
+        </UCard>
       </div>
 
       <!-- List View -->
-      <div
-        v-else
-        class="list-view"
-      >
-        <table class="tracks-table">
-          <thead>
-            <tr>
-              <th class="checkbox-col">
-                <input
-                  type="checkbox"
-                  :checked="selectAllLibrary"
-                  @change="toggleSelectAllLibrary"
-                >
-              </th>
-              <th>Artist</th>
-              <th>Title</th>
-              <th>Album</th>
-              <th>Label</th>
-              <th>Year</th>
-              <th>BPM</th>
-              <th>Key</th>
-              <th>Energy</th>
-              <th>Storage</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="track in filteredTracks"
-              :key="track.id"
-              :class="{ offline: track.storage_status === 'offline', selected: selectedTracks.has(track.id) }"
-              @click="toggleTrackSelect(track.id)"
-            >
-              <td class="checkbox-col">
-                <input
-                  type="checkbox"
-                  :checked="selectedTracks.has(track.id)"
-                  @click.stop="toggleTrackSelect(track.id)"
-                >
-              </td>
-              <td>
-                <span
-                  v-if="!track.musicbrainz_id"
-                  class="no-acoustid-icon"
-                  title="Not in AcoustID"
-                >?</span>
-                {{ track.artist || '-' }}
-              </td>
-              <td>{{ track.title || '-' }}</td>
-              <td>{{ track.album || '-' }}</td>
-              <td>{{ track.label || '-' }}</td>
-              <td>{{ track.year || '-' }}</td>
-              <td>
-                <span
-                  v-if="track.bpm"
-                  class="badge bpm"
-                >{{ Math.round(track.bpm) }}</span>
-              </td>
-              <td>
-                <span
-                  v-if="track.key_notation"
-                  class="badge key"
-                >{{ track.key_notation }}</span>
-              </td>
-              <td>
-                <span
-                  v-if="track.energy"
-                  class="badge energy"
-                >E{{ track.energy }}</span>
-              </td>
-              <td>
-                <template v-if="track.storage_device">
-                  <span
-                    class="status-badge"
-                    :class="track.storage_status"
-                  >{{ track.storage_status }}</span>
-                </template>
-                <span
-                  v-else
-                  class="no-device"
-                >-</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <UCard v-else :ui="{ body: 'p-0' }">
+        <UTable :data="filteredTracks" :columns="tableColumns" :ui="{ tr: 'cursor-pointer hover:bg-elevated/50' }">
+          <template #select-header>
+            <UCheckbox :model-value="selectAllLibrary" @update:model-value="toggleSelectAllLibrary" />
+          </template>
+          <template #select-cell="{ row }">
+            <UCheckbox :model-value="selectedTracks.has(row.id)" @click.stop @update:model-value="toggleTrackSelect(row.id)" />
+          </template>
+          <template #artist-cell="{ row }">
+            <div class="flex items-center gap-1">
+              <UIcon v-if="!row.musicbrainz_id" name="i-lucide-help-circle" class="size-3.5 text-warning shrink-0" />
+              <span>{{ row.artist || '-' }}</span>
+            </div>
+          </template>
+          <template #bpm-cell="{ row }">
+            <UBadge v-if="row.bpm" color="warning" variant="subtle">{{ Math.round(row.bpm) }}</UBadge>
+          </template>
+          <template #key_notation-cell="{ row }">
+            <UBadge v-if="row.key_notation" color="primary" variant="subtle">{{ row.key_notation }}</UBadge>
+          </template>
+          <template #energy-cell="{ row }">
+            <UBadge v-if="row.energy" color="info" variant="subtle">E{{ row.energy }}</UBadge>
+          </template>
+          <template #storage_status-cell="{ row }">
+            <UBadge v-if="row.storage_device" :color="row.storage_status === 'offline' ? 'error' : 'success'" variant="subtle" size="xs">
+              {{ row.storage_status }}
+            </UBadge>
+            <span v-else class="text-muted">-</span>
+          </template>
+        </UTable>
+      </UCard>
     </template>
 
     <!-- Scan Modal -->
-    <div
-      v-if="showScanModal"
-      class="modal-overlay"
-      @click.self="showScanModal = false"
-    >
-      <div class="modal">
-        <h2>Scan External Storage</h2>
-        <p class="modal-description">
-          Scan a directory to find and match tracks by their audio fingerprint.
-          Tracks with existing fingerprints will be matched; new tracks will be added.
-        </p>
+    <UModal v-model:open="showScanModal" title="Scan External Storage" description="Scan a directory to find tracks by fingerprint">
+      <template #content>
+        <UCard>
+          <template #header>
+            <div class="flex items-center justify-between">
+              <h2 class="text-lg font-semibold">Scan External Storage</h2>
+              <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="sm" @click="showScanModal = false" />
+            </div>
+          </template>
 
-        <!-- Available Volumes -->
-        <div class="form-group">
-          <label>Available Storage</label>
-          <div
-            v-if="loadingVolumes"
-            class="volumes-loading"
-          >
-            Detecting mounted volumes...
-          </div>
-          <div
-            v-else-if="volumes.length === 0"
-            class="volumes-empty"
-          >
-            No external storage detected. Mount a drive or enter path manually below.
-          </div>
-          <div
-            v-else
-            class="volumes-grid"
-          >
-            <div
-              v-for="vol in volumes"
-              :key="vol.path"
-              class="volume-card"
-              :class="{ selected: scanPath === vol.path }"
-              @click="selectVolume(vol)"
-            >
-              <div class="volume-icon">
-                💾
-              </div>
-              <div class="volume-info">
-                <span class="volume-label">{{ vol.label }}</span>
-                <span class="volume-path">{{ vol.path }}</span>
-                <span class="volume-size">{{ vol.available }} free of {{ vol.size }}</span>
+          <div class="space-y-4">
+            <p class="text-sm text-muted">Scan a directory to find tracks by fingerprint.</p>
+
+            <div class="space-y-2">
+              <label class="text-sm font-medium">Available Storage</label>
+              <div v-if="loadingVolumes" class="text-center text-muted py-4">Detecting...</div>
+              <div v-else-if="volumes.length === 0" class="text-center text-muted py-4">No external storage detected.</div>
+              <div v-else class="grid grid-cols-2 gap-3">
+                <UCard
+                  v-for="vol in volumes"
+                  :key="vol.path"
+                  class="cursor-pointer transition-all"
+                  :class="{ 'ring-2 ring-primary': scanPath === vol.path }"
+                  :ui="{ body: 'p-3' }"
+                  @click="selectVolume(vol)"
+                >
+                  <div class="flex gap-3 items-start">
+                    <UIcon name="i-lucide-hard-drive" class="size-6 text-muted" />
+                    <div class="min-w-0">
+                      <p class="font-medium text-sm truncate">{{ vol.label }}</p>
+                      <p class="text-xs text-muted truncate">{{ vol.path }}</p>
+                      <p class="text-xs text-primary mt-0.5">{{ vol.available }} free</p>
+                    </div>
+                  </div>
+                </UCard>
               </div>
             </div>
+
+            <UFormField label="Directory Path">
+              <UInput v-model="scanPath" placeholder="/media/music" />
+            </UFormField>
+
+            <UFormField label="Storage Device Name" hint="Used to track device">
+              <UInput v-model="scanDevice" placeholder="e.g., SSD-Music" />
+            </UFormField>
+
+            <UCheckbox v-model="scanRecursive" label="Scan subdirectories" />
+
+            <UAlert v-if="scanResult" :color="scanResult.errors?.length > 0 ? 'warning' : 'success'" variant="soft">
+              Found {{ scanResult.found }} files, {{ scanResult.matched }} matched, {{ scanResult.new }} new
+            </UAlert>
           </div>
-        </div>
 
-        <div class="form-group">
-          <label>Directory Path</label>
-          <input
-            v-model="scanPath"
-            type="text"
-            placeholder="/media/music or /mnt/ssd/music"
-          >
-        </div>
+          <template #footer>
+            <div class="flex justify-end gap-2">
+              <UButton color="neutral" variant="ghost" @click="showScanModal = false">Close</UButton>
+              <UButton :disabled="!scanPath || !scanDevice" :loading="scanning" @click="startScan">Start Scan</UButton>
+            </div>
+          </template>
+        </UCard>
+      </template>
+    </UModal>
 
-        <div class="form-group">
-          <label>Storage Device Name</label>
-          <input
-            v-model="scanDevice"
-            type="text"
-            placeholder="e.g., SSD-Music, External-Drive"
-          >
-          <span class="input-hint">Used to track which device contains the files</span>
-        </div>
+    <AnalysisProgress v-if="currentJob" :job-id="currentJob.id" @close="handleJobClose" />
+    <PublishModal v-if="showPublishModal" :track-ids="Array.from(selectedTracks)" :volumes="volumes" @close="showPublishModal = false" @published="handlePublished" />
 
-        <div class="form-group">
-          <label class="checkbox-label">
-            <input
-              v-model="scanRecursive"
-              type="checkbox"
-            >
-            Scan subdirectories
-          </label>
-        </div>
+    <!-- MusicBrainz Modal -->
+    <UModal v-model:open="showMusicBrainzModal" title="Link to MusicBrainz" description="Link track to MusicBrainz recording">
+      <template #content>
+        <UCard>
+          <template #header>
+            <div class="flex items-center justify-between">
+              <h2 class="text-lg font-semibold">Link to MusicBrainz</h2>
+              <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="sm" @click="closeMusicBrainzModal" />
+            </div>
+          </template>
 
-        <div
-          v-if="scanResult"
-          class="scan-result"
-          :class="{ error: scanResult.errors?.length > 0 }"
-        >
-          <p>
-            <strong>Scan complete:</strong>
-            {{ scanResult.found }} files found,
-            {{ scanResult.matched }} matched,
-            {{ scanResult.new }} new tracks added
-          </p>
-          <p
-            v-if="scanResult.errors?.length > 0"
-            class="scan-errors"
-          >
-            {{ scanResult.errors.length }} error(s)
-          </p>
-        </div>
+          <div class="space-y-4">
+            <div v-if="linkingTrack" class="p-3 rounded-lg bg-elevated text-sm">
+              {{ linkingTrack.artist || 'Unknown' }} - {{ linkingTrack.title || 'Unknown' }}
+            </div>
 
-        <div class="modal-actions">
-          <button
-            class="btn-cancel"
-            @click="showScanModal = false"
-          >
-            Close
-          </button>
-          <button
-            :disabled="scanning || !scanPath || !scanDevice"
-            class="btn-scan"
-            @click="startScan"
-          >
-            {{ scanning ? 'Scanning...' : 'Start Scan' }}
-          </button>
-        </div>
-      </div>
-    </div>
+            <UAlert v-if="linkingResult?.success" color="success" variant="soft">
+              <template #title>Linked: {{ linkingResult.track.artist }} - {{ linkingResult.track.title }}</template>
+              <template v-if="linkingResult.fingerprintSubmitted" #description>Fingerprint submitted to AcoustID</template>
+            </UAlert>
 
-    <!-- Analysis Progress Modal -->
-    <AnalysisProgress
-      v-if="currentJob"
-      :job-id="currentJob.id"
-      @close="handleJobClose"
-    />
+            <UAlert v-if="linkingResult && !linkingResult.success" color="error" variant="soft" :title="linkingResult.error" />
 
-    <!-- Publish Modal -->
-    <PublishModal
-      v-if="showPublishModal"
-      :track-ids="Array.from(selectedTracks)"
-      :volumes="volumes"
-      @close="showPublishModal = false"
-      @published="handlePublished"
-    />
+            <template v-if="!linkingResult?.success">
+              <UFormField label="MusicBrainz Recording ID" hint="Find the recording on MusicBrainz and copy the ID">
+                <UInput v-model="musicBrainzId" placeholder="943e90e3-0665-4b96-8163-b528eaef22cc" :disabled="linkingInProgress" />
+              </UFormField>
 
-    <!-- MusicBrainz Linking Modal -->
-    <div
-      v-if="showMusicBrainzModal"
-      class="modal-overlay"
-      @click.self="closeMusicBrainzModal"
-    >
-      <div class="modal musicbrainz-modal">
-        <h2>Link to MusicBrainz</h2>
-        <p
-          v-if="linkingTrack"
-          class="track-preview"
-        >
-          {{ linkingTrack.artist || 'Unknown' }} - {{ linkingTrack.title || 'Unknown' }}
-        </p>
-
-        <div
-          v-if="linkingResult"
-          class="linking-result"
-          :class="{ success: linkingResult.success, error: !linkingResult.success }"
-        >
-          <p v-if="linkingResult.success">
-            Linked to: {{ linkingResult.track.artist }} - {{ linkingResult.track.title }}
-            <template v-if="linkingResult.track.album">
-              <br><small>Album: {{ linkingResult.track.album }}</small>
+              <UCheckbox v-model="musicBrainzSubmitFingerprint" label="Submit fingerprint to AcoustID" :disabled="linkingInProgress" />
             </template>
-            <template v-if="linkingResult.track.label">
-              <br><small>Label: {{ linkingResult.track.label }}</small>
-            </template>
-            <template v-if="linkingResult.track.year">
-              <br><small>Year: {{ linkingResult.track.year }}</small>
-            </template>
-            <template v-if="linkingResult.fingerprintSubmitted">
-              <br><small class="fingerprint-note">Fingerprint submitted to AcoustID</small>
-            </template>
-          </p>
-          <p v-else>
-            {{ linkingResult.error }}
-          </p>
-        </div>
+          </div>
 
-        <div
-          v-if="!linkingResult?.success"
-          class="form-group"
-        >
-          <label for="musicbrainz-id">MusicBrainz Recording ID</label>
-          <input
-            id="musicbrainz-id"
-            v-model="musicBrainzId"
-            type="text"
-            placeholder="e.g., 943e90e3-0665-4b96-8163-b528eaef22cc"
-            :disabled="linkingInProgress"
-          >
-          <small class="input-hint">
-            Find the recording on
-            <a
-              href="https://musicbrainz.org"
-              target="_blank"
-            >MusicBrainz</a>
-            and copy the ID from the URL
-          </small>
-        </div>
-
-        <div
-          v-if="!linkingResult?.success"
-          class="form-group checkbox-group"
-        >
-          <label>
-            <input
-              v-model="musicBrainzSubmitFingerprint"
-              type="checkbox"
-              :disabled="linkingInProgress"
-            >
-            Submit fingerprint to AcoustID (helps future lookups)
-          </label>
-        </div>
-
-        <div class="modal-actions">
-          <button
-            class="cancel-btn"
-            @click="closeMusicBrainzModal"
-          >
-            {{ linkingResult?.success ? 'Close' : 'Cancel' }}
-          </button>
-          <button
-            v-if="!linkingResult?.success"
-            class="link-btn"
-            :disabled="!musicBrainzId || linkingInProgress"
-            @click="linkToMusicBrainz"
-          >
-            {{ linkingInProgress ? 'Linking...' : 'Link' }}
-          </button>
-        </div>
-      </div>
-    </div>
+          <template #footer>
+            <div class="flex justify-end gap-2">
+              <UButton color="neutral" variant="ghost" @click="closeMusicBrainzModal">
+                {{ linkingResult?.success ? 'Close' : 'Cancel' }}
+              </UButton>
+              <UButton v-if="!linkingResult?.success" :disabled="!musicBrainzId" :loading="linkingInProgress" @click="linkToMusicBrainz">
+                Link
+              </UButton>
+            </div>
+          </template>
+        </UCard>
+      </template>
+    </UModal>
   </div>
 </template>
 
@@ -703,9 +326,27 @@ const filterGenre = ref('')
 const filterLabel = ref('')
 const filterYear = ref('')
 const filterStatus = ref('')
-const filterMissingAcoustid = ref(false)
 
-// Scan modal
+const viewTabs = [
+  { label: 'By Genre', value: 'genre' },
+  { label: 'By Label', value: 'label' },
+  { label: 'By Year', value: 'year' },
+  { label: 'List', value: 'list' },
+]
+
+const tableColumns = [
+  { key: 'select', label: '' },
+  { key: 'artist', label: 'Artist' },
+  { key: 'title', label: 'Title' },
+  { key: 'album', label: 'Album' },
+  { key: 'label', label: 'Label' },
+  { key: 'year', label: 'Year' },
+  { key: 'bpm', label: 'BPM' },
+  { key: 'key_notation', label: 'Key' },
+  { key: 'energy', label: 'Energy' },
+  { key: 'storage_status', label: 'Storage' },
+]
+
 const showScanModal = ref(false)
 const scanPath = ref('')
 const scanDevice = ref('')
@@ -716,24 +357,18 @@ const volumes = ref([])
 const loadingVolumes = ref(false)
 const scanningDownloads = ref(false)
 
-// Pending section
 const showPending = ref(true)
 const selectedPending = ref(new Set())
 const selectAllPending = ref(false)
 
-// Library selection
 const selectedTracks = ref(new Set())
 const selectAllLibrary = ref(false)
 
-// Analysis
 const analyzing = ref(false)
 const deleting = ref(false)
 const currentJob = ref(null)
-
-// Publish modal
 const showPublishModal = ref(false)
 
-// MusicBrainz linking modal
 const showMusicBrainzModal = ref(false)
 const musicBrainzId = ref('')
 const musicBrainzSubmitFingerprint = ref(true)
@@ -741,30 +376,16 @@ const linkingTrack = ref(null)
 const linkingInProgress = ref(false)
 const linkingResult = ref(null)
 
-// Fetch library
 const { data: libraryData, pending, refresh } = await useFetch('/api/library', {
-  default: () => ({
-    tracks: [],
-    pendingTracks: [],
-    stats: { total: 0, byGenre: [], byLabel: [], byYear: [], byStatus: [] },
-    settings: {},
-  }),
+  default: () => ({ tracks: [], pendingTracks: [], stats: { total: 0, byGenre: [], byLabel: [], byYear: [], byStatus: [] }, settings: {} }),
 })
 
 const tracks = computed(() => libraryData.value?.tracks || [])
 const pendingTracks = computed(() => libraryData.value?.pendingTracks || [])
 const stats = computed(() => libraryData.value?.stats)
+const offlineCount = computed(() => stats.value?.byStatus?.find(s => s.status === 'offline')?.count || 0)
+const notInAcoustidCount = computed(() => tracks.value.filter(t => !t.musicbrainz_id).length)
 
-const offlineCount = computed(() => {
-  const statusStat = stats.value?.byStatus?.find(s => s.status === 'offline')
-  return statusStat?.count || 0
-})
-
-const notInAcoustidCount = computed(() => {
-  return tracks.value.filter(t => !t.musicbrainz_id).length
-})
-
-// Extract unique values for filters (only primary genre per track)
 const uniqueGenres = computed(() => {
   const genres = new Set()
   for (const track of tracks.value) {
@@ -772,13 +393,10 @@ const uniqueGenres = computed(() => {
       try {
         const parsed = typeof track.genres === 'string' ? JSON.parse(track.genres) : track.genres
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const primaryGenre = parsed[0].includes('---') ? parsed[0].split('---')[1] : parsed[0]
-          genres.add(primaryGenre)
+          genres.add(parsed[0].includes('---') ? parsed[0].split('---')[1] : parsed[0])
         }
       }
-      catch {
-        // Ignore
-      }
+      catch {}
     }
   }
   return Array.from(genres).sort()
@@ -800,72 +418,38 @@ const uniqueYears = computed(() => {
   return Array.from(years).sort((a, b) => b - a)
 })
 
-// Filter tracks
 const filteredTracks = computed(() => {
   let result = tracks.value
-
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase()
-    result = result.filter(t =>
-      (t.artist?.toLowerCase().includes(query))
-      || (t.title?.toLowerCase().includes(query))
-      || (t.album?.toLowerCase().includes(query)),
-    )
+    result = result.filter(t => t.artist?.toLowerCase().includes(query) || t.title?.toLowerCase().includes(query) || t.album?.toLowerCase().includes(query))
   }
-
   if (filterGenre.value) {
     result = result.filter((t) => {
       if (!t.genres) return false
       try {
         const parsed = typeof t.genres === 'string' ? JSON.parse(t.genres) : t.genres
-        return parsed.some(g =>
-          g.includes(filterGenre.value) || g.split('---')[1] === filterGenre.value,
-        )
+        return parsed.some(g => g.includes(filterGenre.value) || g.split('---')[1] === filterGenre.value)
       }
-      catch {
-        return false
-      }
+      catch { return false }
     })
   }
-
-  if (filterLabel.value) {
-    result = result.filter(t => t.label === filterLabel.value)
-  }
-
-  if (filterYear.value) {
-    result = result.filter(t => t.year === parseInt(filterYear.value, 10))
-  }
-
-  if (filterStatus.value) {
-    result = result.filter(t => t.storage_status === filterStatus.value)
-  }
-
-  if (filterMissingAcoustid.value) {
-    result = result.filter(t => !t.musicbrainz_id)
-  }
-
+  if (filterLabel.value) result = result.filter(t => t.label === filterLabel.value)
+  if (filterYear.value) result = result.filter(t => t.year === Number.parseInt(filterYear.value, 10))
+  if (filterStatus.value) result = result.filter(t => t.storage_status === filterStatus.value)
   return result
 })
 
-// Group tracks by view mode
 const groupedTracks = computed(() => {
   const groups = new Map()
-
   for (const track of filteredTracks.value) {
     let key = 'Unknown'
-
-    if (viewMode.value === 'genre') {
-      if (track.genres) {
-        try {
-          const parsed = typeof track.genres === 'string' ? JSON.parse(track.genres) : track.genres
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            key = parsed[0].includes('---') ? parsed[0].split('---')[1] : parsed[0]
-          }
-        }
-        catch {
-          // Keep default
-        }
+    if (viewMode.value === 'genre' && track.genres) {
+      try {
+        const parsed = typeof track.genres === 'string' ? JSON.parse(track.genres) : track.genres
+        if (Array.isArray(parsed) && parsed.length > 0) key = parsed[0].includes('---') ? parsed[0].split('---')[1] : parsed[0]
       }
+      catch {}
     }
     else if (viewMode.value === 'label') {
       key = track.label || 'Unknown Label'
@@ -873,21 +457,10 @@ const groupedTracks = computed(() => {
     else if (viewMode.value === 'year') {
       key = track.year ? String(track.year) : 'Unknown Year'
     }
-
-    if (!groups.has(key)) {
-      groups.set(key, [])
-    }
+    if (!groups.has(key)) groups.set(key, [])
     groups.get(key).push(track)
   }
-
-  return Array.from(groups.entries())
-    .map(([name, tracks]) => ({ name, tracks }))
-    .sort((a, b) => {
-      if (viewMode.value === 'year') {
-        return (parseInt(b.name, 10) || 0) - (parseInt(a.name, 10) || 0)
-      }
-      return b.tracks.length - a.tracks.length
-    })
+  return Array.from(groups.entries()).map(([name, tracks]) => ({ name, tracks })).sort((a, b) => viewMode.value === 'year' ? (Number.parseInt(b.name, 10) || 0) - (Number.parseInt(a.name, 10) || 0) : b.tracks.length - a.tracks.length)
 })
 
 async function refreshLibrary() {
@@ -900,15 +473,12 @@ async function openScanModal() {
   showScanModal.value = true
   scanResult.value = null
   loadingVolumes.value = true
-
   try {
     volumes.value = await $fetch('/api/volumes')
   }
-  catch (e) {
-    console.error('Failed to load volumes:', e)
+  catch {
     volumes.value = []
   }
-
   loadingVolumes.value = false
 }
 
@@ -919,70 +489,35 @@ function selectVolume(volume) {
 
 async function startScan() {
   if (!scanPath.value || !scanDevice.value) return
-
   scanning.value = true
   scanResult.value = null
-
   try {
-    const result = await $fetch('/api/library/scan', {
-      method: 'POST',
-      body: {
-        path: scanPath.value,
-        storageDevice: scanDevice.value,
-        recursive: scanRecursive.value,
-      },
-    })
-
-    scanResult.value = result
+    scanResult.value = await $fetch('/api/library/scan', { method: 'POST', body: { path: scanPath.value, storageDevice: scanDevice.value, recursive: scanRecursive.value } })
     await refresh()
   }
   catch (e) {
-    console.error('Scan failed:', e)
-    scanResult.value = {
-      found: 0,
-      matched: 0,
-      new: 0,
-      errors: [e.data?.message || 'Scan failed'],
-    }
+    scanResult.value = { found: 0, matched: 0, new: 0, errors: [e.data?.message || 'Scan failed'] }
   }
-
   scanning.value = false
 }
 
-// Scan downloads folder
 async function scanDownloads() {
   scanningDownloads.value = true
-
   try {
-    const result = await $fetch('/api/library/scan', {
-      method: 'POST',
-      body: {
-        path: '/app/downloads',
-        source: 'downloads',
-        recursive: true,
-      },
-    })
-
-    if (result.needsAnalysis > 0) {
-      showPending.value = true
-    }
+    const result = await $fetch('/api/library/scan', { method: 'POST', body: { path: '/app/downloads', source: 'downloads', recursive: true } })
+    if (result.needsAnalysis > 0) showPending.value = true
     await refresh()
   }
   catch (e) {
-    console.error('Scan downloads failed:', e)
     alert(e.data?.message || 'Failed to scan downloads')
   }
-
   scanningDownloads.value = false
 }
 
-// Get filename from path
 function getFilename(filePath) {
-  if (!filePath) return 'Unknown file'
-  return filePath.split('/').pop() || filePath
+  return filePath?.split('/').pop() || 'Unknown file'
 }
 
-// Pending selection
 function togglePendingSelect(trackId) {
   if (selectedPending.value.has(trackId)) {
     selectedPending.value.delete(trackId)
@@ -995,15 +530,9 @@ function togglePendingSelect(trackId) {
 }
 
 function toggleSelectAllPending() {
-  if (selectAllPending.value) {
-    selectedPending.value = new Set(pendingTracks.value.map(t => t.id))
-  }
-  else {
-    selectedPending.value = new Set()
-  }
+  selectedPending.value = selectAllPending.value ? new Set(pendingTracks.value.map(t => t.id)) : new Set()
 }
 
-// Library track selection
 function toggleTrackSelect(trackId) {
   if (selectedTracks.value.has(trackId)) {
     selectedTracks.value.delete(trackId)
@@ -1016,91 +545,52 @@ function toggleTrackSelect(trackId) {
 }
 
 function toggleSelectAllLibrary() {
-  if (selectAllLibrary.value) {
-    selectedTracks.value = new Set(filteredTracks.value.map(t => t.id))
-  }
-  else {
-    selectedTracks.value = new Set()
-  }
+  selectedTracks.value = selectAllLibrary.value ? new Set() : new Set(filteredTracks.value.map(t => t.id))
   selectAllLibrary.value = !selectAllLibrary.value
 }
 
-// Analysis functions
 async function analyzeSelected() {
   if (selectedPending.value.size === 0) return
-
   analyzing.value = true
-
   try {
-    const response = await $fetch('/api/analyze/start', {
-      method: 'POST',
-      body: {
-        trackIds: Array.from(selectedPending.value),
-      },
-    })
-
+    const response = await $fetch('/api/analyze/start', { method: 'POST', body: { trackIds: Array.from(selectedPending.value) } })
     currentJob.value = response.job
     selectedPending.value = new Set()
     selectAllPending.value = false
   }
   catch (e) {
-    console.error('Failed to start analysis:', e)
     alert(e.data?.message || 'Failed to start analysis')
   }
-
   analyzing.value = false
 }
 
 async function reanalyzeSelected() {
   if (selectedTracks.value.size === 0) return
-
   analyzing.value = true
-
   try {
-    const response = await $fetch('/api/analyze/start', {
-      method: 'POST',
-      body: {
-        trackIds: Array.from(selectedTracks.value),
-        forceReanalyze: true,
-      },
-    })
-
+    const response = await $fetch('/api/analyze/start', { method: 'POST', body: { trackIds: Array.from(selectedTracks.value), forceReanalyze: true } })
     currentJob.value = response.job
     selectedTracks.value = new Set()
     selectAllLibrary.value = false
   }
   catch (e) {
-    console.error('Failed to start re-analysis:', e)
     alert(e.data?.message || 'Failed to start re-analysis')
   }
-
   analyzing.value = false
 }
 
 async function deleteSelectedPending() {
-  if (selectedPending.value.size === 0) return
-
-  if (!confirm(`Delete ${selectedPending.value.size} files? This cannot be undone.`)) {
-    return
-  }
-
+  if (selectedPending.value.size === 0 || !confirm(`Delete ${selectedPending.value.size} files?`)) return
   deleting.value = true
-
   try {
-    await $fetch('/api/library/delete', {
-      method: 'POST',
-      body: { trackIds: Array.from(selectedPending.value) },
-    })
-
+    await $fetch('/api/library/delete', { method: 'POST', body: { trackIds: Array.from(selectedPending.value) } })
     selectedPending.value = new Set()
     selectAllPending.value = false
     await refresh()
   }
   catch (e) {
-    console.error('Failed to delete files:', e)
     alert(e.data?.message || 'Failed to delete files')
   }
-
   deleting.value = false
 }
 
@@ -1114,13 +604,9 @@ async function handlePublished(result) {
   selectedTracks.value = new Set()
   selectAllLibrary.value = false
   await refresh()
-
-  if (result.success > 0) {
-    alert(`Published ${result.success} track(s) successfully.${result.errors?.length > 0 ? ` ${result.errors.length} failed.` : ''}`)
-  }
+  if (result.success > 0) alert(`Published ${result.success} track(s).`)
 }
 
-// MusicBrainz linking
 function openMusicBrainzModal(track) {
   linkingTrack.value = track
   musicBrainzId.value = track.musicbrainz_id || ''
@@ -1133,965 +619,26 @@ function closeMusicBrainzModal() {
   showMusicBrainzModal.value = false
   linkingTrack.value = null
   musicBrainzId.value = ''
+  if (linkingResult.value?.success) refresh()
   linkingResult.value = null
-  if (linkingResult.value?.success) {
-    refresh()
-  }
 }
 
 async function linkToMusicBrainz() {
   if (!musicBrainzId.value || !linkingTrack.value) return
-
   linkingInProgress.value = true
   linkingResult.value = null
-
   try {
-    const result = await $fetch('/api/library/link-musicbrainz', {
-      method: 'POST',
-      body: {
-        trackId: linkingTrack.value.id,
-        recordingId: musicBrainzId.value.trim(),
-        submitFingerprint: musicBrainzSubmitFingerprint.value,
-      },
-    })
-
-    linkingResult.value = result
-    if (result.success) {
-      await refresh()
-    }
+    linkingResult.value = await $fetch('/api/library/link-musicbrainz', { method: 'POST', body: { trackId: linkingTrack.value.id, recordingId: musicBrainzId.value.trim(), submitFingerprint: musicBrainzSubmitFingerprint.value } })
+    if (linkingResult.value.success) await refresh()
   }
   catch (e) {
-    console.error('Failed to link to MusicBrainz:', e)
-    linkingResult.value = {
-      success: false,
-      error: e.data?.message || 'Failed to link to MusicBrainz',
-    }
+    linkingResult.value = { success: false, error: e.data?.message || 'Failed to link' }
   }
-
   linkingInProgress.value = false
 }
 
-// Get the single selected track (for MusicBrainz linking)
 const singleSelectedTrack = computed(() => {
   if (selectedTracks.value.size !== 1) return null
-  const trackId = Array.from(selectedTracks.value)[0]
-  return tracks.value.find(t => t.id === trackId)
+  return tracks.value.find(t => t.id === Array.from(selectedTracks.value)[0])
 })
 </script>
-
-<style scoped>
-.library-page {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.page-header h1 {
-  font-size: 1.8rem;
-  color: #eee;
-}
-
-.header-actions {
-  display: flex;
-  gap: 12px;
-}
-
-.refresh-btn,
-.scan-btn,
-.scan-downloads-btn {
-  padding: 10px 20px;
-  background: #333;
-  color: #eee;
-}
-
-.scan-btn {
-  background: #9b59b6;
-  color: #fff;
-}
-
-.scan-btn:hover {
-  opacity: 0.9;
-}
-
-.scan-downloads-btn {
-  background: #00dc82;
-  color: #1a1a2e;
-  font-weight: 600;
-}
-
-.scan-downloads-btn:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.scan-downloads-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Stats Bar */
-.stats-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 24px;
-  padding: 16px 24px;
-  background: #16213e;
-  border-radius: 12px;
-  flex-wrap: wrap;
-}
-
-.stats-info {
-  display: flex;
-  gap: 24px;
-}
-
-.stat {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.stat-value {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #00dc82;
-}
-
-.stat-value.offline {
-  color: #ff4757;
-}
-
-.stat-value.not-in-acoustid {
-  color: #ffa502;
-}
-
-.stat-value .stat-icon {
-  font-size: 0.9rem;
-  vertical-align: baseline;
-  margin-right: 2px;
-}
-
-.stat-label {
-  font-size: 0.85rem;
-  color: #666;
-}
-
-/* Selection Actions in Stats Bar */
-.selection-actions {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.selection-count {
-  color: #aaa;
-  font-size: 0.9rem;
-}
-
-.reanalyze-btn {
-  padding: 8px 16px;
-  background: #9b59b6;
-  color: #fff;
-  font-weight: 500;
-}
-
-.reanalyze-btn:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.reanalyze-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.publish-btn {
-  padding: 8px 16px;
-  background: #3498db;
-  color: #fff;
-  font-weight: 500;
-}
-
-.publish-btn:hover {
-  opacity: 0.9;
-}
-
-/* Pending Section */
-.pending-section {
-  background: #16213e;
-  border-radius: 12px;
-  overflow: hidden;
-  border: 1px solid #2a2a4a;
-}
-
-.pending-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  background: #1a1a2e;
-  cursor: pointer;
-  user-select: none;
-}
-
-.pending-header:hover {
-  background: #1f2942;
-}
-
-.pending-header h2 {
-  color: #ffa502;
-  font-size: 1.1rem;
-  font-weight: 600;
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.collapse-icon {
-  color: #666;
-  font-size: 1.2rem;
-  width: 20px;
-  text-align: center;
-}
-
-.pending-hint {
-  color: #666;
-  font-size: 0.85rem;
-}
-
-.pending-content {
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.selection-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  background: #1a1a2e;
-  border-radius: 8px;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.select-all {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #aaa;
-  cursor: pointer;
-}
-
-.select-all input {
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-}
-
-.pending-actions {
-  display: flex;
-  gap: 12px;
-}
-
-.analyze-btn {
-  padding: 10px 24px;
-  background: #00dc82;
-  color: #1a1a2e;
-  font-weight: 600;
-}
-
-.analyze-btn:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.analyze-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.delete-btn {
-  padding: 8px 16px;
-  background: #ff4757;
-  color: #fff;
-  font-weight: 500;
-}
-
-.delete-btn:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.delete-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.pending-list {
-  display: flex;
-  flex-direction: column;
-  background: #1a1a2e;
-  border-radius: 8px;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.pending-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  border-bottom: 1px solid #2a2a4a;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.pending-item:hover {
-  background: rgba(255, 165, 2, 0.1);
-}
-
-.pending-item.selected {
-  background: rgba(255, 165, 2, 0.15);
-}
-
-.pending-item:last-child {
-  border-bottom: none;
-}
-
-.pending-item input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.pending-filename {
-  flex: 1;
-  color: #eee;
-  font-size: 0.9rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pending-source.badge,
-.pending-status.badge {
-  font-size: 0.7rem;
-  padding: 2px 8px;
-  border-radius: 4px;
-  text-transform: uppercase;
-}
-
-.pending-source.badge {
-  color: #9b59b6;
-  background: rgba(155, 89, 182, 0.15);
-}
-
-.pending-status.badge.failed {
-  color: #ff4757;
-  background: rgba(255, 71, 87, 0.15);
-}
-
-.pending-status.badge.analyzing {
-  color: #ffa502;
-  background: rgba(255, 165, 2, 0.15);
-}
-
-/* Filters */
-.filters {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.search-input {
-  flex: 1;
-  min-width: 200px;
-  padding: 10px 16px;
-}
-
-.filter-select {
-  padding: 10px 16px;
-  background: #16213e;
-  border: 1px solid #333;
-  border-radius: 8px;
-  color: #eee;
-  cursor: pointer;
-}
-
-.filter-select:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  color: #666;
-}
-
-/* View Tabs */
-.view-tabs {
-  display: flex;
-  gap: 8px;
-  border-bottom: 1px solid #333;
-  padding-bottom: 12px;
-}
-
-.tab {
-  padding: 8px 16px;
-  background: transparent;
-  color: #aaa;
-  border-radius: 6px;
-}
-
-.tab:hover {
-  background: #16213e;
-  color: #eee;
-}
-
-.tab.active {
-  background: #9b59b6;
-  color: #fff;
-}
-
-.tab-separator {
-  width: 1px;
-  height: 20px;
-  background: #333;
-  margin: 0 8px;
-  align-self: center;
-}
-
-.tab.filter-tab {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.tab.filter-tab.active {
-  background: #ffa502;
-  color: #1a1a2e;
-}
-
-.tab.filter-tab .tab-icon {
-  width: 14px;
-  height: 14px;
-  font-size: 0.6rem;
-}
-
-.tab.filter-tab.active .tab-icon {
-  background: rgba(26, 26, 46, 0.3);
-  color: #1a1a2e;
-}
-
-.tab-count {
-  font-size: 0.75rem;
-  padding: 1px 6px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 10px;
-}
-
-.tab.filter-tab.active .tab-count {
-  background: rgba(26, 26, 46, 0.2);
-}
-
-/* Loading & Empty */
-.loading {
-  color: #666;
-  text-align: center;
-  padding: 60px 20px;
-}
-
-.empty-section {
-  color: #555;
-  padding: 40px;
-  background: #16213e;
-  border-radius: 8px;
-  text-align: center;
-}
-
-/* Grid View */
-.grid-view {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 16px;
-}
-
-.group-card {
-  background: #16213e;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.group-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  background: #1a1a2e;
-  border-bottom: 1px solid #2a2a4a;
-}
-
-.group-name {
-  color: #9b59b6;
-  font-weight: 600;
-}
-
-.group-count {
-  color: #666;
-  font-size: 0.85rem;
-  background: #2a2a4a;
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-
-.group-tracks {
-  max-height: 250px;
-  overflow-y: auto;
-}
-
-.track-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 16px;
-  border-bottom: 1px solid #2a2a4a;
-  gap: 12px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.track-item:hover {
-  background: rgba(155, 89, 182, 0.1);
-}
-
-.track-item.selected {
-  background: rgba(155, 89, 182, 0.15);
-}
-
-.track-item:last-child {
-  border-bottom: none;
-}
-
-.track-item.offline {
-  opacity: 0.6;
-}
-
-.track-checkbox {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.track-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.track-title {
-  display: block;
-  font-size: 0.9rem;
-  color: #eee;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.offline-icon {
-  margin-right: 4px;
-  font-size: 0.8rem;
-}
-
-.no-acoustid-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  margin-right: 4px;
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: #ffa502;
-  background: rgba(255, 165, 2, 0.2);
-  border-radius: 50%;
-  vertical-align: middle;
-}
-
-.track-album {
-  display: block;
-  font-size: 0.75rem;
-  color: #666;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.track-badges {
-  display: flex;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-/* Badges */
-.badge {
-  font-size: 0.7rem;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-weight: 500;
-}
-
-.badge.bpm {
-  color: #ffa502;
-  background: rgba(255, 165, 2, 0.15);
-}
-
-.badge.key {
-  color: #00dc82;
-  background: rgba(0, 220, 130, 0.15);
-}
-
-.badge.energy {
-  color: #3498db;
-  background: rgba(52, 152, 219, 0.15);
-}
-
-/* List View */
-.list-view {
-  overflow-x: auto;
-}
-
-.tracks-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: #16213e;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.tracks-table th,
-.tracks-table td {
-  padding: 12px 16px;
-  text-align: left;
-  border-bottom: 1px solid #2a2a4a;
-}
-
-.tracks-table th {
-  background: #1a1a2e;
-  color: #aaa;
-  font-weight: 500;
-  font-size: 0.85rem;
-}
-
-.tracks-table tr.offline {
-  opacity: 0.6;
-}
-
-.tracks-table tr.selected {
-  background: rgba(155, 89, 182, 0.15);
-}
-
-.tracks-table tr:hover {
-  background: rgba(155, 89, 182, 0.1);
-  cursor: pointer;
-}
-
-.tracks-table .checkbox-col {
-  width: 40px;
-  text-align: center;
-}
-
-.tracks-table .checkbox-col input {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-}
-
-.tracks-table td {
-  font-size: 0.9rem;
-  color: #eee;
-}
-
-.status-badge {
-  font-size: 0.75rem;
-  padding: 2px 8px;
-  border-radius: 4px;
-  text-transform: capitalize;
-}
-
-.status-badge.available {
-  color: #00dc82;
-  background: rgba(0, 220, 130, 0.15);
-}
-
-.status-badge.offline {
-  color: #ff4757;
-  background: rgba(255, 71, 87, 0.15);
-}
-
-.no-device {
-  color: #555;
-}
-
-/* Modal */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal {
-  background: #16213e;
-  border-radius: 12px;
-  padding: 24px;
-  width: 90%;
-  max-width: 500px;
-}
-
-.modal h2 {
-  margin-bottom: 8px;
-  color: #eee;
-}
-
-.modal-description {
-  color: #888;
-  font-size: 0.9rem;
-  margin-bottom: 20px;
-}
-
-.form-group {
-  margin-bottom: 16px;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 6px;
-  color: #aaa;
-  font-size: 0.9rem;
-}
-
-.form-group input[type="text"] {
-  width: 100%;
-}
-
-.input-hint {
-  font-size: 0.75rem;
-  color: #666;
-  margin-top: 4px;
-  display: block;
-}
-
-.checkbox-label {
-  display: flex !important;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-}
-
-.checkbox-label input {
-  width: 18px;
-  height: 18px;
-}
-
-.scan-result {
-  padding: 12px;
-  background: rgba(0, 220, 130, 0.1);
-  border-radius: 8px;
-  margin-bottom: 16px;
-  color: #00dc82;
-}
-
-.scan-result.error {
-  background: rgba(255, 71, 87, 0.1);
-  color: #ff4757;
-}
-
-.scan-errors {
-  font-size: 0.85rem;
-  margin-top: 8px;
-}
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 20px;
-}
-
-.btn-cancel {
-  padding: 10px 20px;
-  background: #333;
-  color: #eee;
-}
-
-.btn-scan {
-  padding: 10px 20px;
-  background: #9b59b6;
-  color: #fff;
-}
-
-.btn-scan:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Volumes Grid */
-.volumes-loading,
-.volumes-empty {
-  padding: 16px;
-  background: #1a1a2e;
-  border-radius: 8px;
-  color: #666;
-  text-align: center;
-  font-size: 0.9rem;
-}
-
-.volumes-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 12px;
-}
-
-.volume-card {
-  display: flex;
-  gap: 12px;
-  padding: 12px;
-  background: #1a1a2e;
-  border: 2px solid transparent;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.volume-card:hover {
-  background: #1f2942;
-  border-color: #333;
-}
-
-.volume-card.selected {
-  background: rgba(155, 89, 182, 0.15);
-  border-color: #9b59b6;
-}
-
-.volume-icon {
-  font-size: 1.5rem;
-  flex-shrink: 0;
-}
-
-.volume-info {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.volume-label {
-  font-weight: 600;
-  color: #eee;
-  font-size: 0.95rem;
-}
-
-.volume-path {
-  font-size: 0.75rem;
-  color: #666;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.volume-size {
-  font-size: 0.75rem;
-  color: #9b59b6;
-  margin-top: 2px;
-}
-
-/* MusicBrainz Button */
-.musicbrainz-btn {
-  padding: 8px 16px;
-  background: #e91e63;
-  color: #fff;
-  font-weight: 500;
-}
-
-.musicbrainz-btn:hover {
-  opacity: 0.9;
-}
-
-/* MusicBrainz Modal */
-.musicbrainz-modal {
-  max-width: 500px;
-}
-
-.musicbrainz-modal .track-preview {
-  color: #aaa;
-  margin-bottom: 16px;
-  padding: 8px 12px;
-  background: #1a1a2e;
-  border-radius: 6px;
-  font-size: 0.9rem;
-}
-
-.musicbrainz-modal .linking-result {
-  padding: 12px 16px;
-  border-radius: 8px;
-  margin-bottom: 16px;
-}
-
-.musicbrainz-modal .linking-result.success {
-  background: rgba(0, 220, 130, 0.1);
-  border: 1px solid #00dc82;
-}
-
-.musicbrainz-modal .linking-result.error {
-  background: rgba(255, 71, 87, 0.1);
-  border: 1px solid #ff4757;
-}
-
-.musicbrainz-modal .linking-result p {
-  margin: 0;
-  color: #eee;
-}
-
-.musicbrainz-modal .linking-result small {
-  color: #aaa;
-}
-
-.musicbrainz-modal .fingerprint-note {
-  color: #00dc82 !important;
-}
-
-.musicbrainz-modal .input-hint {
-  display: block;
-  margin-top: 6px;
-  color: #666;
-}
-
-.musicbrainz-modal .input-hint a {
-  color: #e91e63;
-}
-
-.musicbrainz-modal .checkbox-group label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-}
-
-.musicbrainz-modal .link-btn {
-  background: #e91e63;
-  color: #fff;
-}
-
-.musicbrainz-modal .link-btn:hover:not(:disabled) {
-  opacity: 0.9;
-}
-</style>

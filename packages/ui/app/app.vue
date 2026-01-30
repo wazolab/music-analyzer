@@ -9,10 +9,13 @@
           </div>
         </template>
 
-        <UNavigationMenu
-          :items="navItems"
-          orientation="vertical"
-        />
+        <template #default="{ collapsed }">
+          <UNavigationMenu
+            :items="navItems"
+            orientation="vertical"
+            :ui="collapsed ? { link: 'justify-center', linkLabel: 'hidden', linkLeadingIcon: 'size-5' } : {}"
+          />
+        </template>
 
         <template #footer="{ collapsed }">
           <div class="p-4 text-sm">

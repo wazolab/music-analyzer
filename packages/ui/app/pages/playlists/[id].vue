@@ -1,101 +1,121 @@
 <template>
-  <div
-    class="playlist-detail"
-    :class="{ 'has-player': currentTrack }"
-  >
-    <div class="playlist-content">
-      <div
-        v-if="pending"
-        class="loading"
-      >
+  <div class="flex gap-6">
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col gap-6 min-w-0">
+      <div v-if="pending" class="text-muted text-center py-10">
         Loading playlist...
       </div>
-      <div
+      <UAlert
         v-else-if="fetchError"
-        class="error"
-      >
-        {{ fetchError.data?.message || 'Failed to load playlist' }}
-      </div>
+        color="error"
+        icon="i-lucide-alert-circle"
+        title="Error"
+        :description="fetchError.data?.message || 'Failed to load playlist'"
+      />
       <template v-else-if="playlist">
-        <div class="playlist-header">
-          <div class="playlist-info">
-            <NuxtLink
-              to="/"
-              class="back-link"
-            >&larr; Back to playlists</NuxtLink>
-            <h2>{{ playlist.name }}</h2>
-            <div class="meta">
-              <span>{{ playlist.track_count }} tracks</span>
-              <span class="separator">|</span>
-              <a
+        <!-- Header -->
+        <div class="flex justify-between items-start gap-5">
+          <div class="flex-1">
+            <UButton
+              to="/online-playlists"
+              variant="link"
+              color="neutral"
+              icon="i-lucide-arrow-left"
+              class="mb-3 -ml-2"
+            >
+              Back to playlists
+            </UButton>
+            <h2 class="text-2xl font-bold mb-2">{{ playlist.name }}</h2>
+            <div class="text-muted text-sm flex items-center gap-2 flex-wrap">
+              <UBadge color="neutral" variant="subtle">{{ playlist.track_count }} tracks</UBadge>
+              <UButton
                 :href="playlist.url"
                 target="_blank"
-                class="source-link"
-              >View source</a>
-              <span class="separator">|</span>
-              <ClientOnly><span>Updated {{ formatDate(playlist.updated_at) }}</span></ClientOnly>
+                variant="link"
+                color="primary"
+                size="xs"
+                icon="i-lucide-external-link"
+              >
+                View source
+              </UButton>
+              <ClientOnly>
+                <span class="text-muted">Updated {{ formatDate(playlist.updated_at) }}</span>
+              </ClientOnly>
             </div>
           </div>
-          <button
-            :disabled="syncing"
-            class="sync-btn"
+          <UButton
+            icon="i-lucide-refresh-cw"
+            :loading="syncing"
+            color="neutral"
+            variant="soft"
             @click="syncPlaylist"
           >
-            {{ syncing ? 'Syncing...' : 'Re-sync' }}
-          </button>
+            Re-sync
+          </UButton>
         </div>
 
-        <div
+        <UAlert
           v-if="error"
-          class="error"
-        >
-          {{ error }}
-        </div>
+          color="error"
+          icon="i-lucide-alert-circle"
+          :description="error"
+          closeable
+          @close="error = ''"
+        />
 
-        <div class="tracks-list">
-          <TrackRow
-            v-for="(track, index) in playlist.tracks"
-            :key="track.id"
-            :track="track"
-            :index="index + 1"
-            :in-prep="prepTrackIds.has(track.id)"
-            :is-playing="currentTrack?.id === track.id"
-            @toggle-prep="handleTogglePrep"
-            @toggle-play="handleTogglePlay"
-          />
-        </div>
+        <!-- Tracks List -->
+        <UCard :ui="{ body: 'p-0' }">
+          <div class="divide-y divide-default">
+            <TrackRow
+              v-for="(track, index) in playlist.tracks"
+              :key="track.id"
+              :track="track"
+              :index="index + 1"
+              :in-prep="prepTrackIds.has(track.id)"
+              :is-playing="currentTrack?.id === track.id"
+              @toggle-prep="handleTogglePrep"
+              @toggle-play="handleTogglePlay"
+            />
+          </div>
+          <div
+            v-if="playlist.tracks?.length === 0"
+            class="text-muted text-center py-10"
+          >
+            No tracks in this playlist
+          </div>
+        </UCard>
       </template>
     </div>
 
-    <!-- Audio Player (Right Panel) -->
-    <aside
-      v-if="currentTrack"
-      class="player-panel"
-    >
-      <div class="player-header">
-        <span class="player-label">Now Playing</span>
-        <button
-          class="player-close"
-          @click="stopPlayback"
-        >
-          ✕
-        </button>
-      </div>
-      <div class="player-info">
-        <div class="player-artist">
-          {{ currentTrack.artist }}
+    <!-- Right Panel Player -->
+    <aside v-if="currentTrack" class="w-80 shrink-0">
+      <UCard class="sticky top-8">
+        <template #header>
+          <div class="flex justify-between items-center">
+            <span class="text-muted text-xs uppercase tracking-wide">Now Playing</span>
+            <UButton
+              icon="i-lucide-x"
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              @click="stopPlayback"
+            />
+          </div>
+        </template>
+        <div class="space-y-4">
+          <div>
+            <div class="text-primary font-medium">{{ currentTrack.artist }}</div>
+            <div>{{ currentTrack.title }}</div>
+          </div>
+          <iframe
+            v-if="embedUrl"
+            :src="embedUrl"
+            class="w-full h-42 rounded-lg"
+            allow="autoplay"
+            frameborder="0"
+          />
         </div>
-        <div class="player-title">
-          {{ currentTrack.title }}
-        </div>
-      </div>
-      <iframe
-        v-if="embedUrl"
-        :src="embedUrl"
-        class="player-embed"
-        allow="autoplay"
-        frameborder="0"
-      />
+      </UCard>
     </aside>
   </div>
 </template>
@@ -217,159 +237,3 @@ function stopPlayback() {
   currentTrack.value = null
 }
 </script>
-
-<style scoped>
-.playlist-detail {
-  display: flex;
-  gap: 24px;
-}
-
-.playlist-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  min-width: 0;
-}
-
-.loading {
-  color: #666;
-  text-align: center;
-  padding: 40px;
-}
-
-.error {
-  padding: 12px 16px;
-  background: #ff475722;
-  border: 1px solid #ff4757;
-  border-radius: 8px;
-  color: #ff4757;
-}
-
-.playlist-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 20px;
-}
-
-.playlist-info {
-  flex: 1;
-}
-
-.back-link {
-  display: inline-block;
-  margin-bottom: 12px;
-  color: #666;
-  font-size: 0.9rem;
-}
-
-.back-link:hover {
-  color: #00dc82;
-}
-
-h2 {
-  font-size: 1.5rem;
-  color: #eee;
-  margin-bottom: 8px;
-}
-
-.meta {
-  color: #666;
-  font-size: 0.9rem;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.separator {
-  color: #444;
-}
-
-.source-link {
-  color: #00dc82;
-}
-
-.sync-btn {
-  padding: 10px 20px;
-  background: #333;
-  color: #eee;
-}
-
-.sync-btn:hover {
-  background: #444;
-}
-
-.tracks-list {
-  background: #16213e;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.empty {
-  color: #666;
-  text-align: center;
-  padding: 40px;
-}
-
-/* Right Panel Player */
-.player-panel {
-  width: 320px;
-  flex-shrink: 0;
-  background: #16213e;
-  border-radius: 12px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  height: fit-content;
-  position: sticky;
-  top: 30px;
-}
-
-.player-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.player-label {
-  color: #666;
-  font-size: 0.85rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.player-close {
-  padding: 6px 10px;
-  background: #333;
-  color: #888;
-  font-size: 0.85rem;
-}
-
-.player-close:hover {
-  background: #ff4757;
-  color: #fff;
-}
-
-.player-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.player-artist {
-  color: #00dc82;
-  font-weight: 500;
-}
-
-.player-title {
-  color: #eee;
-}
-
-.player-embed {
-  width: 100%;
-  height: 166px;
-  border-radius: 8px;
-}
-</style>
