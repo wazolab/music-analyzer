@@ -51,6 +51,20 @@
         </div>
       </div>
 
+      <!-- Warning for tracks without AcoustID match -->
+      <div
+        v-if="tracksNeedingManualLink.length > 0 && (job?.status === 'completed' || job?.status === 'running')"
+        class="warning-section"
+      >
+        <div class="warning-header">
+          <span class="warning-icon">⚠</span>
+          <span>{{ tracksNeedingManualLink.length }} track(s) not found in AcoustID</span>
+        </div>
+        <p class="warning-hint">
+          Use "Link to MusicBrainz" to add metadata manually
+        </p>
+      </div>
+
       <div
         v-if="job?.status === 'completed'"
         class="success-message"
@@ -95,9 +109,11 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close'])
+const toast = useToast()
 
 const cancelling = ref(false)
 const showLogs = ref(true)
+const toastShown = ref(false)
 
 // Fetch job status
 const { data: job, refresh } = await useFetch(
@@ -135,6 +151,30 @@ const statusTitle = computed(() => {
 const progressPercent = computed(() => {
   if (!job.value?.total_files) return 0
   return Math.round((job.value.completed_files / job.value.total_files) * 100)
+})
+
+// Tracks that need manual MusicBrainz linking (stored in job data)
+const tracksNeedingManualLink = computed(() => {
+  if (!job.value?.tracks_needing_link) return []
+  try {
+    return JSON.parse(job.value.tracks_needing_link)
+  }
+  catch {
+    return []
+  }
+})
+
+// Show toast when job completes with tracks needing manual linking
+watch(() => job.value?.status, (status) => {
+  if (status === 'completed' && tracksNeedingManualLink.value.length > 0 && !toastShown.value) {
+    toastShown.value = true
+    toast.add({
+      title: 'Tracks need manual linking',
+      description: `${tracksNeedingManualLink.value.length} track(s) not found in AcoustID. Use "Link to MusicBrainz" to add metadata.`,
+      color: 'warning',
+      timeout: 10000,
+    })
+  }
 })
 
 function handleClose() {
@@ -304,5 +344,31 @@ h2 {
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Warning section */
+.warning-section {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+
+.warning-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.warning-icon {
+  font-size: 1.2rem;
+}
+
+.warning-hint {
+  margin: 8px 0 0 0;
+  color: #aaa;
+  font-size: 0.85rem;
 }
 </style>

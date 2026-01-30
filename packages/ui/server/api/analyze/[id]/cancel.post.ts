@@ -1,8 +1,5 @@
-import { exec } from 'child_process'
-import { promisify } from 'util'
 import { getAnalysisJobById, updateAnalysisJobStatus } from '../../../utils/db'
-
-const execAsync = promisify(exec)
+import { cancelJob } from '../start.post'
 
 export default defineEventHandler(async (event) => {
   const id = Number(getRouterParam(event, 'id'))
@@ -30,16 +27,10 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // Stop the docker container for this job
-  try {
-    await execAsync(`docker stop analyzer-job-${id}`)
-  }
-  catch (e) {
-    // Container may have already stopped
-    console.warn(`Could not stop container analyzer-job-${id}:`, e)
-  }
+  // Cancel the job (will stop processing new tracks)
+  cancelJob(id)
 
-  // Update status
+  // Update status immediately
   updateAnalysisJobStatus(id, 'cancelled')
 
   return {

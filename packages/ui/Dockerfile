@@ -1,12 +1,14 @@
 FROM node:22-slim
 
-# Install yt-dlp, ffmpeg, Docker CLI, sqlite3, and dependencies
+# Install yt-dlp, ffmpeg, Docker CLI, sqlite3, fingerprinting tools, and dependencies
 RUN apt-get update && apt-get install -y \
     python3 \
     curl \
     ffmpeg \
     docker.io \
     sqlite3 \
+    flac \
+    libchromaprint-tools \
     && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
     && chmod a+rx /usr/local/bin/yt-dlp \
     && apt-get clean \

@@ -106,6 +106,8 @@ export interface MountedVolume {
 
 // Library types
 export type StorageStatus = 'available' | 'offline' | 'moved'
+export type AnalysisStatus = 'pending' | 'analyzing' | 'analyzed' | 'failed'
+export type TrackSource = 'downloads' | 'external'
 
 export interface LibraryTrack {
   id: number
@@ -128,6 +130,8 @@ export interface LibraryTrack {
   first_seen_at: string
   last_analyzed_at: string | null
   last_seen_at: string | null
+  analysis_status: AnalysisStatus
+  source: TrackSource
 }
 
 export interface LibraryTrackInput {

@@ -7,8 +7,8 @@ RUN apt-get update && apt-get install -y \
     libchromaprint-tools \
     && rm -rf /var/lib/apt/lists/*
 
-# Install essentia with TensorFlow support and mutagen for tag writing
-RUN pip3 install essentia-tensorflow mutagen
+# Install essentia with TensorFlow support, mutagen for tag writing, flask for HTTP service
+RUN pip3 install essentia-tensorflow mutagen flask
 
 WORKDIR /app
 
@@ -39,6 +39,9 @@ COPY src/analyzers/ ./analyzers/
 COPY src/utils.py ./
 COPY src/converter.py ./
 COPY src/classify.py ./
+COPY src/server.py ./
 
-ENTRYPOINT ["python3", "classify.py"]
-CMD ["--help"]
+# Default: run as HTTP service
+# For CLI mode: docker run music-analyzer cli [args]
+EXPOSE 8000
+CMD ["python3", "server.py"]

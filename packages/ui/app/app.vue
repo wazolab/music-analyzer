@@ -1,5 +1,6 @@
 <template>
-  <div class="dashboard">
+  <UApp>
+    <div class="dashboard">
     <aside class="sidebar">
       <div class="logo">
         <h1>Music Pipeline</h1>
@@ -21,14 +22,6 @@
         >
           <span class="nav-icon">🎧</span>
           <span>DJ Prep</span>
-        </NuxtLink>
-        <NuxtLink
-          to="/analysis"
-          class="nav-item"
-          :class="{ active: route.path === '/analysis' }"
-        >
-          <span class="nav-icon">🎵</span>
-          <span>Analysis</span>
         </NuxtLink>
         <NuxtLink
           to="/library"
@@ -81,6 +74,7 @@
       <NuxtPage />
     </main>
   </div>
+  </UApp>
 </template>
 
 <script setup>

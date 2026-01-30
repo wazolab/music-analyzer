@@ -4,10 +4,9 @@ import { existsSync } from 'fs'
 import { spawn } from 'child_process'
 import {
   getLibraryTrackByFingerprint,
-  upsertLibraryTrack,
-  updateLibraryTrackPath,
+  upsertLibraryTrackFromScan,
 } from '../../utils/db'
-import type { LibraryTrack } from '../../utils/types'
+import type { LibraryTrack, TrackSource } from '../../utils/types'
 
 const AUDIO_EXTENSIONS = ['.flac']
 
@@ -15,6 +14,7 @@ interface ScanResult {
   found: number
   matched: number
   new: number
+  needsAnalysis: number
   errors: string[]
   tracks: LibraryTrack[]
 }
@@ -90,15 +90,33 @@ async function generateFingerprint(filePath: string): Promise<{ fingerprint: str
   })
 }
 
+// Write fingerprint to FLAC tags for faster future scans
+async function writeFingerprintToFlac(filePath: string, fingerprint: string, duration: number): Promise<void> {
+  return new Promise((resolve) => {
+    const proc = spawn('metaflac', [
+      '--remove-tag=ACOUSTID_FINGERPRINT',
+      '--remove-tag=ACOUSTID_FINGERPRINT_DURATION',
+      `--set-tag=ACOUSTID_FINGERPRINT=${fingerprint}`,
+      `--set-tag=ACOUSTID_FINGERPRINT_DURATION=${duration}`,
+      filePath,
+    ])
+
+    proc.on('exit', () => resolve())
+    proc.on('error', () => resolve())
+  })
+}
+
 async function scanDirectory(
   dir: string,
-  storageDevice: string,
+  source: TrackSource,
+  storageDevice?: string,
   recursive: boolean = true,
 ): Promise<ScanResult> {
   const result: ScanResult = {
     found: 0,
     matched: 0,
     new: 0,
+    needsAnalysis: 0,
     errors: [],
     tracks: [],
   }
@@ -141,6 +159,7 @@ async function scanDirectory(
     try {
       // First try to read fingerprint from FLAC tags (instant)
       let { fingerprint, duration } = await readFingerprintFromFlac(filePath)
+      let wasGenerated = false
 
       // If not in tags, generate it (1-2 seconds)
       if (!fingerprint) {
@@ -148,6 +167,7 @@ async function scanDirectory(
         const generated = await generateFingerprint(filePath)
         fingerprint = generated.fingerprint
         duration = generated.duration
+        wasGenerated = true
       }
 
       if (!fingerprint || !duration) {
@@ -155,33 +175,53 @@ async function scanDirectory(
         continue
       }
 
+      // Write fingerprint to FLAC tags if we just generated it (for faster future scans)
+      if (wasGenerated) {
+        await writeFingerprintToFlac(filePath, fingerprint, duration)
+      }
+
       // Check if track exists in library
       const existing = getLibraryTrackByFingerprint(fingerprint)
 
       if (existing) {
-        // Update path if it changed
-        if (existing.file_path !== filePath) {
-          updateLibraryTrackPath(fingerprint, filePath)
-          console.log(`[Library Scan] Updated path for: ${existing.artist} - ${existing.title}`)
-        }
+        // Track already in library - update path if changed
+        const track = upsertLibraryTrackFromScan({
+          fingerprint,
+          fingerprint_duration: duration,
+          file_path: filePath,
+          source,
+          storage_device: storageDevice,
+        })
+
         result.matched++
-        result.tracks.push({ ...existing, file_path: filePath })
+        result.tracks.push(track)
+
+        // Check if it needs analysis
+        if (track.analysis_status !== 'analyzed') {
+          result.needsAnalysis++
+        }
+
+        if (existing.file_path !== filePath) {
+          console.log(`[Library Scan] Updated path for: ${existing.artist || 'Unknown'} - ${existing.title || basename(filePath)}`)
+        }
       }
       else {
-        // New track - add to library with minimal info
+        // New track - add to library with pending analysis status
         const stats = await stat(filePath)
 
-        const track = upsertLibraryTrack({
+        const track = upsertLibraryTrackFromScan({
           fingerprint,
           fingerprint_duration: duration,
           file_path: filePath,
           file_size_bytes: stats.size,
+          source,
           storage_device: storageDevice,
         })
 
         result.new++
+        result.needsAnalysis++
         result.tracks.push(track)
-        console.log(`[Library Scan] Added new track: ${filePath}`)
+        console.log(`[Library Scan] Added new track (pending analysis): ${basename(filePath)}`)
       }
     }
     catch (e) {
@@ -194,10 +234,11 @@ async function scanDirectory(
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
-  const { path, storageDevice, recursive = true } = body as {
+  const { path, storageDevice, recursive = true, source = 'external' } = body as {
     path: string
-    storageDevice: string
+    storageDevice?: string
     recursive?: boolean
+    source?: TrackSource
   }
 
   if (!path) {
@@ -207,18 +248,14 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  if (!storageDevice) {
-    throw createError({
-      statusCode: 400,
-      message: 'storageDevice is required (e.g., "SSD-Music")',
-    })
-  }
+  // Determine source based on path if not explicitly set
+  const trackSource: TrackSource = source === 'downloads' || path.includes('/downloads') ? 'downloads' : 'external'
 
-  console.log(`[Library Scan] Starting scan of: ${path} (device: ${storageDevice})`)
+  console.log(`[Library Scan] Starting scan of: ${path} (source: ${trackSource}${storageDevice ? `, device: ${storageDevice}` : ''})`)
 
-  const result = await scanDirectory(path, storageDevice, recursive)
+  const result = await scanDirectory(path, trackSource, storageDevice, recursive)
 
-  console.log(`[Library Scan] Complete: ${result.found} found, ${result.matched} matched, ${result.new} new`)
+  console.log(`[Library Scan] Complete: ${result.found} found, ${result.matched} matched, ${result.new} new, ${result.needsAnalysis} need analysis`)
 
   return result
 })

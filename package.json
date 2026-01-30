@@ -5,7 +5,8 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace=packages/ui",
+    "dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build",
+    "dev:down": "docker compose -f docker-compose.yml -f docker-compose.dev.yml down",
     "build": "npm run build --workspace=packages/analyzer && npm run build --workspace=packages/ui",
     "build:analyzer": "npm run build --workspace=packages/analyzer",
     "build:ui": "npm run build --workspace=packages/ui",

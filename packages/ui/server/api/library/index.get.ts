@@ -1,4 +1,4 @@
-import { getAllLibraryTracks, getLibraryStats } from '../../utils/db'
+import { getAnalyzedTracks, getPendingTracks, getLibraryStats, getLibrarySettings } from '../../utils/db'
 import type { LibraryFilters } from '../../utils/types'
 
 export default defineEventHandler(async (event) => {
@@ -25,11 +25,20 @@ export default defineEventHandler(async (event) => {
     filters.search = query.search
   }
 
-  const tracks = getAllLibraryTracks(Object.keys(filters).length > 0 ? filters : undefined)
+  // Get analyzed tracks (main library view)
+  const tracks = getAnalyzedTracks(Object.keys(filters).length > 0 ? filters : undefined)
+
+  // Get pending tracks (need analysis)
+  const pendingTracks = getPendingTracks()
+
+  // Get stats and settings
   const stats = getLibraryStats()
+  const settings = getLibrarySettings()
 
   return {
     tracks,
+    pendingTracks,
     stats,
+    settings,
   }
 })

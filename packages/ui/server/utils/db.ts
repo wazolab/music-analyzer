@@ -102,6 +102,14 @@ catch (e) {
   // Column already exists
 }
 
+// Migration: Add tracks_needing_link column to analysis_jobs
+try {
+  db.exec('ALTER TABLE analysis_jobs ADD COLUMN tracks_needing_link TEXT')
+}
+catch (e) {
+  // Column already exists
+}
+
 // Analysis job tables
 db.exec(`
   CREATE TABLE IF NOT EXISTS analysis_jobs (
@@ -173,6 +181,38 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_library_year ON library_tracks(year);
   CREATE INDEX IF NOT EXISTS idx_library_storage ON library_tracks(storage_status);
 `)
+
+// Library settings table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS library_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+  );
+`)
+
+// Migration: add analysis_status column to library_tracks
+try {
+  db.exec('ALTER TABLE library_tracks ADD COLUMN analysis_status TEXT DEFAULT \'analyzed\'')
+}
+catch (e) {
+  // Column already exists
+}
+
+// Migration: add source column to library_tracks
+try {
+  db.exec('ALTER TABLE library_tracks ADD COLUMN source TEXT DEFAULT \'downloads\'')
+}
+catch (e) {
+  // Column already exists
+}
+
+// Create index on analysis_status for efficient filtering
+try {
+  db.exec('CREATE INDEX IF NOT EXISTS idx_library_analysis_status ON library_tracks(analysis_status)')
+}
+catch (e) {
+  // Index already exists
+}
 
 // Migration: add fingerprint columns to download_files
 try {
@@ -489,6 +529,13 @@ export function updateAnalysisJobLogs(id: number, logs: string): void {
   db.prepare('UPDATE analysis_jobs SET logs = ? WHERE id = ?').run(logs, id)
 }
 
+export function addTrackNeedingLink(id: number, trackInfo: { filename: string, trackId: number }): void {
+  const job = db.prepare('SELECT tracks_needing_link FROM analysis_jobs WHERE id = ?').get(id) as { tracks_needing_link: string | null } | undefined
+  const existing = job?.tracks_needing_link ? JSON.parse(job.tracks_needing_link) : []
+  existing.push(trackInfo)
+  db.prepare('UPDATE analysis_jobs SET tracks_needing_link = ? WHERE id = ?').run(JSON.stringify(existing), id)
+}
+
 export function setAnalysisJobFiles(jobId: number, fileIds: number[]): void {
   const update = db.prepare('UPDATE download_files SET job_id = ?, status = ? WHERE id = ?')
   const updateJob = db.prepare('UPDATE analysis_jobs SET total_files = ? WHERE id = ?')
@@ -746,17 +793,20 @@ export function markLibraryTracksOnline(storageDevice: string): number {
 
 export function getLibraryStats(): {
   total: number
+  pending: number
   byGenre: { genre: string, count: number }[]
   byLabel: { label: string, count: number }[]
   byYear: { year: number, count: number }[]
   byStatus: { status: StorageStatus, count: number }[]
 } {
-  const total = (db.prepare('SELECT COUNT(*) as count FROM library_tracks').get() as { count: number }).count
+  // Count only analyzed tracks for stats
+  const total = (db.prepare('SELECT COUNT(*) as count FROM library_tracks WHERE analysis_status = \'analyzed\'').get() as { count: number }).count
+  const pending = (db.prepare('SELECT COUNT(*) as count FROM library_tracks WHERE analysis_status != \'analyzed\' OR analysis_status IS NULL').get() as { count: number }).count
 
   const byGenre = db.prepare(`
     SELECT genres as genre, COUNT(*) as count
     FROM library_tracks
-    WHERE genres IS NOT NULL
+    WHERE genres IS NOT NULL AND analysis_status = 'analyzed'
     GROUP BY genres
     ORDER BY count DESC
     LIMIT 20
@@ -765,7 +815,7 @@ export function getLibraryStats(): {
   const byLabel = db.prepare(`
     SELECT label, COUNT(*) as count
     FROM library_tracks
-    WHERE label IS NOT NULL
+    WHERE label IS NOT NULL AND analysis_status = 'analyzed'
     GROUP BY label
     ORDER BY count DESC
     LIMIT 20
@@ -774,7 +824,7 @@ export function getLibraryStats(): {
   const byYear = db.prepare(`
     SELECT year, COUNT(*) as count
     FROM library_tracks
-    WHERE year IS NOT NULL
+    WHERE year IS NOT NULL AND analysis_status = 'analyzed'
     GROUP BY year
     ORDER BY year DESC
   `).all() as { year: number, count: number }[]
@@ -782,15 +832,194 @@ export function getLibraryStats(): {
   const byStatus = db.prepare(`
     SELECT storage_status as status, COUNT(*) as count
     FROM library_tracks
+    WHERE analysis_status = 'analyzed'
     GROUP BY storage_status
   `).all() as { status: StorageStatus, count: number }[]
 
-  return { total, byGenre, byLabel, byYear, byStatus }
+  return { total, pending, byGenre, byLabel, byYear, byStatus }
 }
 
 export function deleteLibraryTrack(id: number): boolean {
   const result = db.prepare('DELETE FROM library_tracks WHERE id = ?').run(id)
   return result.changes > 0
+}
+
+// Library settings operations
+export function getLibrarySettings(): Record<string, string> {
+  const rows = db.prepare('SELECT key, value FROM library_settings').all() as { key: string, value: string }[]
+  const settings: Record<string, string> = {}
+  for (const row of rows) {
+    settings[row.key] = row.value
+  }
+  return settings
+}
+
+export function setLibrarySetting(key: string, value: string): void {
+  db.prepare(`
+    INSERT INTO library_settings (key, value) VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+  `).run(key, value)
+}
+
+// Pending tracks operations (for unified library view)
+export function getPendingTracks(): LibraryTrack[] {
+  return db.prepare(`
+    SELECT * FROM library_tracks
+    WHERE analysis_status != 'analyzed' OR analysis_status IS NULL
+    ORDER BY first_seen_at DESC
+  `).all() as LibraryTrack[]
+}
+
+export function getAnalyzedTracks(filters?: LibraryFilters): LibraryTrack[] {
+  let query = 'SELECT * FROM library_tracks WHERE analysis_status = \'analyzed\''
+  const params: any[] = []
+
+  if (filters) {
+    if (filters.genre) {
+      query += ' AND genres LIKE ?'
+      params.push(`%${filters.genre}%`)
+    }
+    if (filters.label) {
+      query += ' AND label = ?'
+      params.push(filters.label)
+    }
+    if (filters.year) {
+      query += ' AND year = ?'
+      params.push(filters.year)
+    }
+    if (filters.key) {
+      query += ' AND key_notation = ?'
+      params.push(filters.key)
+    }
+    if (filters.storage_status) {
+      query += ' AND storage_status = ?'
+      params.push(filters.storage_status)
+    }
+    if (filters.search) {
+      query += ' AND (artist LIKE ? OR title LIKE ? OR album LIKE ?)'
+      const searchTerm = `%${filters.search}%`
+      params.push(searchTerm, searchTerm, searchTerm)
+    }
+  }
+
+  query += ' ORDER BY last_analyzed_at DESC'
+  return db.prepare(query).all(...params) as LibraryTrack[]
+}
+
+// Create a pending track from scan (fingerprint-based)
+export function upsertLibraryTrackFromScan(data: {
+  fingerprint: string
+  fingerprint_duration: number
+  file_path: string
+  file_size_bytes?: number
+  source: 'downloads' | 'external'
+  storage_device?: string
+}): LibraryTrack {
+  const existing = getLibraryTrackByFingerprint(data.fingerprint)
+
+  if (existing) {
+    // Update file path if it changed (file was moved)
+    if (existing.file_path !== data.file_path) {
+      db.prepare(`
+        UPDATE library_tracks
+        SET file_path = ?, last_seen_at = datetime('now'),
+            storage_status = 'available', storage_device = COALESCE(?, storage_device)
+        WHERE fingerprint = ?
+      `).run(data.file_path, data.storage_device ?? null, data.fingerprint)
+    }
+    return getLibraryTrackById(existing.id)!
+  }
+
+  // Insert new pending track
+  const result = db.prepare(`
+    INSERT INTO library_tracks (
+      fingerprint, fingerprint_duration, file_path, file_size_bytes,
+      source, storage_device, analysis_status, storage_status, last_seen_at
+    ) VALUES (?, ?, ?, ?, ?, ?, 'pending', 'available', datetime('now'))
+  `).run(
+    data.fingerprint,
+    data.fingerprint_duration,
+    data.file_path,
+    data.file_size_bytes ?? null,
+    data.source,
+    data.storage_device ?? null,
+  )
+
+  return getLibraryTrackById(result.lastInsertRowid as number)!
+}
+
+// Update track after analysis completes
+export function updateLibraryTrackAnalysisStatus(
+  id: number,
+  status: 'pending' | 'analyzing' | 'analyzed' | 'failed',
+): void {
+  db.prepare(`
+    UPDATE library_tracks
+    SET analysis_status = ?
+    WHERE id = ?
+  `).run(status, id)
+}
+
+// Update track with analysis results
+export function updateLibraryTrackAnalysisResults(
+  fingerprint: string,
+  data: {
+    artist?: string
+    title?: string
+    album?: string
+    label?: string
+    year?: number
+    bpm?: number
+    key_notation?: string
+    energy?: number
+    genres?: string[]
+    musicbrainz_id?: string
+    file_path?: string
+  },
+): boolean {
+  const updates: string[] = []
+  const values: any[] = []
+
+  if (data.artist !== undefined) { updates.push('artist = ?'); values.push(data.artist) }
+  if (data.title !== undefined) { updates.push('title = ?'); values.push(data.title) }
+  if (data.album !== undefined) { updates.push('album = ?'); values.push(data.album) }
+  if (data.label !== undefined) { updates.push('label = ?'); values.push(data.label) }
+  if (data.year !== undefined) { updates.push('year = ?'); values.push(data.year) }
+  if (data.bpm !== undefined) { updates.push('bpm = ?'); values.push(data.bpm) }
+  if (data.key_notation !== undefined) { updates.push('key_notation = ?'); values.push(data.key_notation) }
+  if (data.energy !== undefined) { updates.push('energy = ?'); values.push(data.energy) }
+  if (data.genres !== undefined) { updates.push('genres = ?'); values.push(JSON.stringify(data.genres)) }
+  if (data.musicbrainz_id !== undefined) { updates.push('musicbrainz_id = ?'); values.push(data.musicbrainz_id) }
+  if (data.file_path !== undefined) { updates.push('file_path = ?'); values.push(data.file_path) }
+
+  if (updates.length === 0) return false
+
+  updates.push('analysis_status = \'analyzed\'')
+  updates.push('last_analyzed_at = datetime(\'now\')')
+  values.push(fingerprint)
+
+  const result = db.prepare(`UPDATE library_tracks SET ${updates.join(', ')} WHERE fingerprint = ?`).run(...values)
+  return result.changes > 0
+}
+
+// Get library tracks by IDs (for analysis and publish operations)
+export function getLibraryTracksByIds(ids: number[]): LibraryTrack[] {
+  if (ids.length === 0) return []
+  const placeholders = ids.map(() => '?').join(',')
+  return db.prepare(`SELECT * FROM library_tracks WHERE id IN (${placeholders})`).all(...ids) as LibraryTrack[]
+}
+
+// Update track after publishing to external drive
+export function updateLibraryTrackPublished(
+  id: number,
+  newPath: string,
+  storageDevice: string,
+): void {
+  db.prepare(`
+    UPDATE library_tracks
+    SET file_path = ?, storage_device = ?, storage_status = 'available', last_seen_at = datetime('now')
+    WHERE id = ?
+  `).run(newPath, storageDevice, id)
 }
 
 export default db

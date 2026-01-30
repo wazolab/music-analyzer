@@ -139,21 +139,33 @@ class MetadataLookup:
             MetadataResult with track metadata
         """
         # Generate fingerprint (also gives us exact duration)
+        print(f"[METADATA] Generating fingerprint for: {file_path}")
         fingerprint, duration = get_fingerprint(file_path)
+        print(f"[METADATA] Fingerprint: {'found' if fingerprint else 'NOT FOUND'}, duration: {duration}s")
 
         # Try AcoustID + MusicBrainz first (most reliable - uses audio fingerprint)
         if fingerprint:
+            print(f"[METADATA] Querying AcoustID...")
             recordings, confidence = self._query_acoustid(fingerprint, duration)
+            print(f"[METADATA] AcoustID returned {len(recordings)} recordings (confidence: {confidence:.2f})")
             if recordings:
+                for i, rec in enumerate(recordings[:3]):
+                    print(f"[METADATA]   Recording {i+1}: {rec.get('title', 'Unknown')} by {', '.join(a.get('name', '') for a in rec.get('artists', []))}")
                 recording_id = self._find_best_recording(
                     recordings, duration, hint_artist, hint_title
                 )
+                print(f"[METADATA] Best recording ID: {recording_id}")
                 if recording_id:
                     result = self._query_musicbrainz(recording_id)
+                    print(f"[METADATA] MusicBrainz result: {result.artist} - {result.title}")
                     if result.title:  # Got valid metadata
                         result.confidence = confidence
                         result.musicbrainz_id = recording_id
                         return result
+            else:
+                print(f"[METADATA] No recordings found in AcoustID")
+        else:
+            print(f"[METADATA] No fingerprint - skipping AcoustID lookup")
 
         # Fallback to Discogs search (text-based, for niche tracks)
         if hint_artist and hint_title and self.discogs_token:
@@ -745,3 +757,86 @@ def lookup_metadata(
     except ValueError as e:
         print(f"Metadata lookup disabled: {e}")
         return MetadataResult()
+
+
+def lookup_by_musicbrainz_id(recording_id: str, api_key: Optional[str] = None) -> MetadataResult:
+    """
+    Look up metadata directly from MusicBrainz using a recording ID.
+
+    Args:
+        recording_id: MusicBrainz recording UUID (e.g., '943e90e3-0665-4b96-8163-b528eaef22cc')
+        api_key: AcoustID API key (needed for MetadataLookup initialization)
+
+    Returns:
+        MetadataResult with track metadata
+    """
+    try:
+        lookup = MetadataLookup(api_key)
+        result = lookup._query_musicbrainz(recording_id)
+        result.musicbrainz_id = recording_id
+        result.confidence = 1.0  # Manual link = full confidence
+        return result
+    except Exception as e:
+        print(f"MusicBrainz lookup error: {e}")
+        return MetadataResult()
+
+
+def submit_fingerprint_to_acoustid(
+    fingerprint: str,
+    duration: int,
+    musicbrainz_id: str,
+    api_key: Optional[str] = None,
+    user_key: Optional[str] = None,
+) -> bool:
+    """
+    Submit a fingerprint to AcoustID linked to a MusicBrainz recording.
+
+    This helps future lookups find the track automatically.
+
+    Args:
+        fingerprint: Audio fingerprint from fpcalc
+        duration: Duration in seconds
+        musicbrainz_id: MusicBrainz recording UUID
+        api_key: AcoustID API key (uses env var if not provided)
+        user_key: AcoustID user submission key (uses env var if not provided)
+
+    Returns:
+        True if submission succeeded, False otherwise
+    """
+    api_key = api_key or os.environ.get("ACOUSTID_API_KEY")
+    user_key = user_key or os.environ.get("ACOUSTID_USER_KEY")
+
+    if not api_key or not user_key:
+        print("AcoustID API key and user key required for submission")
+        return False
+
+    SUBMIT_URL = "https://api.acoustid.org/v2/submit"
+
+    params = {
+        "client": api_key,
+        "user": user_key,
+        "fingerprint": fingerprint,
+        "duration": str(duration),
+        "mbid": musicbrainz_id,
+    }
+
+    try:
+        data = urllib.parse.urlencode(params).encode("utf-8")
+        req = urllib.request.Request(
+            SUBMIT_URL,
+            data=data,
+            headers={"User-Agent": "MusicAnalyzer/1.0 (https://github.com/music-analyzer)"},
+        )
+        with urllib.request.urlopen(req, timeout=30) as response:
+            result = json.loads(response.read().decode())
+
+        if result.get("status") == "ok":
+            print(f"Successfully submitted fingerprint to AcoustID for recording {musicbrainz_id}")
+            return True
+        else:
+            print(f"AcoustID submission error: {result.get('error', {}).get('message', 'Unknown error')}")
+            return False
+
+    except Exception as e:
+        print(f"AcoustID submission failed: {e}")
+        return False

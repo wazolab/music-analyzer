@@ -1,0 +1,26 @@
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+
+# Virtual environments
+venv
+.venv
+env
+
+# Models - downloaded at runtime
+models
+
+# Development files
+*.log
+.env
+.env.*
+
+# IDE
+.vscode
+.idea
+
+# Git
+.git
+.gitignore

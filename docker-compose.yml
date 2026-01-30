@@ -21,8 +21,10 @@ services:
       - HOST_DOWNLOADS_DIR=${DOWNLOADS_DIR:-${PWD}/downloads}
       - UID=${UID:-1000}
       - GID=${GID:-1000}
+      - ANALYZER_URL=http://analyzer:8000
     depends_on:
       - slskd
+      - analyzer
     restart: unless-stopped
 
   slskd:
@@ -50,15 +52,19 @@ services:
       context: ./packages/analyzer
       dockerfile: Dockerfile
     image: music-analyzer
+    container_name: music-pipeline-analyzer
     user: "${UID:-1000}:${GID:-1000}"
-    profiles:
-      - tools
+    ports:
+      - "8000:8000"
     volumes:
       - ${DOWNLOADS_DIR:-./downloads}:/input:rw
       - ${MUSIC_DIR:-./music}:/output
     environment:
       - ACOUSTID_API_KEY=${ACOUSTID_API_KEY:-}
+      - ACOUSTID_USER_KEY=${ACOUSTID_USER_KEY:-}
       - DISCOGS_TOKEN=${DISCOGS_TOKEN:-}
+      - PORT=8000
+    restart: unless-stopped
 
 volumes:
   ui-data:

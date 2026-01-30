@@ -1,0 +1,20 @@
+# Dependencies - installed fresh in container
+node_modules
+
+# Build outputs - rebuilt in container
+.nuxt
+.output
+dist
+
+# Development files
+*.log
+.env
+.env.*
+
+# IDE
+.vscode
+.idea
+
+# Git
+.git
+.gitignore
