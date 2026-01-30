@@ -628,12 +628,6 @@ const groupedTracks = computed(() => {
   return Array.from(groups.entries()).map(([name, tracks]) => ({ name, tracks })).sort((a, b) => viewMode.value === 'year' ? (Number.parseInt(b.name, 10) || 0) - (Number.parseInt(a.name, 10) || 0) : b.tracks.length - a.tracks.length)
 })
 
-async function refreshLibrary() {
-  refreshing.value = true
-  await refresh()
-  refreshing.value = false
-}
-
 async function openScanModal() {
   showScanModal.value = true
   scanResult.value = null
