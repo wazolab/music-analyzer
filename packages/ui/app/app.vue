@@ -1,79 +1,84 @@
 <template>
   <UApp>
-    <div class="dashboard">
-    <aside class="sidebar">
-      <div class="logo">
-        <h1>Music Pipeline</h1>
-      </div>
-
-      <nav class="nav">
-        <NuxtLink
-          to="/"
-          class="nav-item"
-          :class="{ active: route.path === '/' }"
-        >
-          <span class="nav-icon">📋</span>
-          <span>Playlists</span>
-        </NuxtLink>
-        <NuxtLink
-          to="/preparation"
-          class="nav-item"
-          :class="{ active: route.path === '/preparation' }"
-        >
-          <span class="nav-icon">🎧</span>
-          <span>DJ Prep</span>
-        </NuxtLink>
-        <NuxtLink
-          to="/library"
-          class="nav-item"
-          :class="{ active: route.path === '/library' }"
-        >
-          <span class="nav-icon">📚</span>
-          <span>Library</span>
-        </NuxtLink>
-      </nav>
-
-      <div class="sidebar-footer">
-        <div
-          class="slskd-status"
-          :class="slskdStatus"
-        >
-          <div class="status-row">
-            <span class="status-dot" />
-            <span>slskd: {{ slskdStatus }}</span>
+    <UDashboardGroup>
+      <UDashboardSidebar collapsible>
+        <template #header="{ collapsed }">
+          <div class="flex items-center gap-2" :class="{ 'justify-center': collapsed }">
+            <UIcon name="i-lucide-music" class="size-6 text-primary" />
+            <span v-if="!collapsed" class="font-bold text-lg">Music Pipeline</span>
           </div>
-          <div class="status-actions">
-            <a
-              v-if="slskdStatus === 'running'"
-              href="http://localhost:5030"
-              target="_blank"
-              class="slskd-link"
-            >Open UI</a>
-            <button
-              v-if="slskdStatus === 'stopped'"
-              :disabled="loading"
-              class="btn-small"
-              @click="startSlskd"
-            >
-              Start
-            </button>
-            <button
-              v-else-if="slskdStatus === 'running'"
-              :disabled="loading"
-              class="btn-small btn-danger"
-              @click="stopSlskd"
-            >
-              Stop
-            </button>
-          </div>
-        </div>
-      </div>
-    </aside>
+        </template>
 
-    <main class="main-content">
-      <NuxtPage />
-    </main>
-  </div>
+        <UNavigationMenu
+          :items="navItems"
+          orientation="vertical"
+        />
+
+        <template #footer="{ collapsed }">
+          <div class="p-4 text-sm">
+            <div class="flex items-center gap-2" :class="{ 'justify-center': collapsed, 'mb-2': !collapsed }">
+              <span
+                class="size-2 rounded-full shrink-0"
+                :class="{
+                  'bg-green-500': slskdStatus === 'running',
+                  'bg-red-500': slskdStatus === 'stopped',
+                  'bg-yellow-500': slskdStatus === 'checking',
+                }"
+                :title="collapsed ? `slskd: ${slskdStatus}` : undefined"
+              />
+              <span v-if="!collapsed" class="text-muted">slskd: {{ slskdStatus }}</span>
+            </div>
+            <div v-if="!collapsed" class="flex gap-2">
+              <UButton
+                v-if="slskdStatus === 'running'"
+                to="http://localhost:5030"
+                target="_blank"
+                size="xs"
+                variant="soft"
+              >
+                Open UI
+              </UButton>
+              <UButton
+                v-if="slskdStatus === 'stopped'"
+                size="xs"
+                :loading="loading"
+                @click="startSlskd"
+              >
+                Start
+              </UButton>
+              <UButton
+                v-else-if="slskdStatus === 'running'"
+                size="xs"
+                color="error"
+                variant="soft"
+                :loading="loading"
+                @click="stopSlskd"
+              >
+                Stop
+              </UButton>
+            </div>
+          </div>
+        </template>
+      </UDashboardSidebar>
+
+      <UDashboardPanel>
+        <template #header>
+          <UDashboardNavbar>
+            <template #leading>
+              <UDashboardSidebarCollapse />
+            </template>
+
+            <template #right>
+              <UColorModeButton />
+            </template>
+          </UDashboardNavbar>
+        </template>
+
+        <template #body>
+          <NuxtPage />
+        </template>
+      </UDashboardPanel>
+    </UDashboardGroup>
   </UApp>
 </template>
 
@@ -81,6 +86,35 @@
 const route = useRoute()
 const slskdStatus = ref('checking')
 const loading = ref(false)
+
+const navItems = computed(() => [
+  [
+    {
+      label: 'Dashboard',
+      icon: 'i-lucide-layout-dashboard',
+      to: '/',
+      active: route.path === '/',
+    },
+    {
+      label: 'Online Playlists',
+      icon: 'i-lucide-list-music',
+      to: '/online-playlists',
+      active: route.path === '/online-playlists' || route.path.startsWith('/playlists'),
+    },
+    {
+      label: 'DJ Prep',
+      icon: 'i-lucide-headphones',
+      to: '/preparation',
+      active: route.path === '/preparation',
+    },
+    {
+      label: 'Library',
+      icon: 'i-lucide-library',
+      to: '/library',
+      active: route.path === '/library',
+    },
+  ],
+])
 
 onMounted(async () => {
   await checkSlskdStatus()
@@ -122,190 +156,3 @@ async function stopSlskd() {
   loading.value = false
 }
 </script>
-
-<style>
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #1a1a2e;
-  color: #eee;
-  min-height: 100vh;
-}
-
-.dashboard {
-  display: flex;
-  min-height: 100vh;
-}
-
-.sidebar {
-  width: 240px;
-  background: #16213e;
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid #333;
-  position: fixed;
-  top: 0;
-  left: 0;
-  bottom: 0;
-}
-
-.logo {
-  padding: 24px 20px;
-  border-bottom: 1px solid #333;
-}
-
-h1 {
-  font-size: 1.3rem;
-  color: #00dc82;
-}
-
-.nav {
-  flex: 1;
-  padding: 20px 12px;
-}
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border-radius: 8px;
-  color: #aaa;
-  text-decoration: none;
-  transition: all 0.2s;
-}
-
-.nav-item:hover {
-  background: #1a2744;
-  color: #eee;
-  text-decoration: none;
-}
-
-.nav-item.active {
-  background: #00dc8220;
-  color: #00dc82;
-}
-
-.nav-icon {
-  font-size: 1.1rem;
-}
-
-.sidebar-footer {
-  padding: 16px;
-  border-top: 1px solid #333;
-}
-
-.slskd-status {
-  font-size: 0.85rem;
-}
-
-.status-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #666;
-}
-
-.slskd-status.running .status-dot {
-  background: #00dc82;
-}
-
-.slskd-status.stopped .status-dot {
-  background: #ff4757;
-}
-
-.slskd-status.checking .status-dot {
-  background: #ffa502;
-}
-
-.status-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.slskd-link {
-  color: #00dc82;
-  text-decoration: none;
-  padding: 6px 10px;
-  background: #1a1a2e;
-  border-radius: 6px;
-  font-size: 0.8rem;
-}
-
-.slskd-link:hover {
-  background: #1a2744;
-  text-decoration: none;
-}
-
-.btn-small {
-  padding: 6px 12px;
-  font-size: 0.8rem;
-}
-
-.btn-danger {
-  background: #ff4757;
-}
-
-.main-content {
-  flex: 1;
-  margin-left: 240px;
-  padding: 30px 40px;
-  max-width: 1200px;
-}
-
-button {
-  padding: 12px 24px;
-  border: none;
-  border-radius: 8px;
-  background: #00dc82;
-  color: #1a1a2e;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.2s;
-}
-
-button:hover {
-  opacity: 0.9;
-}
-
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-input {
-  padding: 12px 16px;
-  border: 1px solid #333;
-  border-radius: 8px;
-  background: #16213e;
-  color: #eee;
-  font-size: 1rem;
-}
-
-input:focus {
-  outline: none;
-  border-color: #00dc82;
-}
-
-a {
-  color: #00dc82;
-  text-decoration: none;
-}
-
-a:hover {
-  text-decoration: underline;
-}
-</style>

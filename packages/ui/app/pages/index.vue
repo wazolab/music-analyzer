@@ -1,188 +1,56 @@
 <template>
-  <div class="playlists-page">
-    <header class="page-header">
-      <h1>Playlists</h1>
-    </header>
+  <div class="flex flex-col gap-8">
+    <h1 class="text-3xl font-bold">Dashboard</h1>
 
-    <section class="import-section">
-      <h2>Import Playlist</h2>
-      <div class="import-form">
-        <input
-          v-model="playlistUrl"
-          type="text"
-          placeholder="Paste SoundCloud or YouTube playlist URL..."
-          @keyup.enter="extractPlaylist"
+    <!-- Stats Overview -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <UCard :ui="{ body: 'p-4 text-center' }">
+        <div class="text-3xl font-bold text-primary">{{ libraryStats?.total || 0 }}</div>
+        <div class="text-sm text-muted">Tracks</div>
+      </UCard>
+      <NuxtLink to="/online-playlists" class="block">
+        <UCard
+          :ui="{ body: 'p-4 text-center' }"
+          class="h-full transition-all hover:ring-2 hover:ring-primary cursor-pointer"
         >
-        <input
-          v-model="playlistName"
-          type="text"
-          placeholder="Playlist name"
-          @keyup.enter="extractPlaylist"
+          <div class="text-3xl font-bold text-primary">{{ playlistCount }}</div>
+          <div class="text-sm text-muted">Online Playlists</div>
+        </UCard>
+      </NuxtLink>
+      <NuxtLink to="/library" class="block">
+        <UCard
+          :ui="{ body: 'p-4 text-center' }"
+          class="h-full transition-all hover:ring-2 hover:ring-warning cursor-pointer"
         >
-        <button
-          :disabled="extracting || !playlistUrl || !playlistName"
-          @click="extractPlaylist"
-        >
-          {{ extracting ? 'Importing...' : 'Import' }}
-        </button>
-      </div>
-      <div
-        v-if="error"
-        class="error"
-      >
-        {{ error }}
-      </div>
-    </section>
-
-    <section class="playlists-section">
-      <h2>My Playlists ({{ playlists.length }})</h2>
-      <div
-        v-if="pending"
-        class="loading"
-      >
-        Loading playlists...
-      </div>
-      <div
-        v-else-if="playlists.length === 0"
-        class="empty"
-      >
-        No playlists yet. Import one above!
-      </div>
-      <div
-        v-else
-        class="playlist-grid"
-      >
-        <PlaylistCard
-          v-for="playlist in playlists"
-          :key="playlist.id"
-          :playlist="playlist"
-          @delete="handleDelete"
-        />
-      </div>
-    </section>
+          <div class="text-3xl font-bold" :class="pendingCount > 0 ? 'text-warning' : 'text-primary'">
+            {{ pendingCount }}
+          </div>
+          <div class="text-sm text-muted">Pending Analysis</div>
+        </UCard>
+      </NuxtLink>
+      <UCard :ui="{ body: 'p-4 text-center' }">
+        <div class="text-3xl font-bold" :class="offlineCount > 0 ? 'text-error' : 'text-primary'">
+          {{ offlineCount }}
+        </div>
+        <div class="text-sm text-muted">Offline</div>
+      </UCard>
+    </div>
   </div>
 </template>
 
 <script setup>
-useHead({ title: 'Playlists' })
+useHead({ title: 'Dashboard' })
 
-const playlistUrl = ref('')
-const playlistName = ref('')
-const extracting = ref(false)
-const error = ref('')
+const { data: libraryData } = await useFetch('/api/library', {
+  default: () => ({ tracks: [], pendingTracks: [], stats: { total: 0, byStatus: [] } }),
+})
 
-const { data: playlists, pending, refresh } = await useFetch('/api/playlists', {
+const { data: playlists } = await useFetch('/api/playlists', {
   default: () => [],
 })
 
-async function extractPlaylist() {
-  if (!playlistUrl.value || !playlistName.value) return
-
-  extracting.value = true
-  error.value = ''
-
-  try {
-    // First extract tracks from URL
-    const extracted = await $fetch('/api/playlist/extract', {
-      method: 'POST',
-      body: { url: playlistUrl.value },
-    })
-
-    if (!extracted.tracks || extracted.tracks.length === 0) {
-      throw new Error('No tracks found in playlist')
-    }
-
-    // Then create the playlist
-    await $fetch('/api/playlists', {
-      method: 'POST',
-      body: {
-        name: playlistName.value,
-        url: playlistUrl.value,
-        tracks: extracted.tracks,
-      },
-    })
-
-    // Reset form and refresh list
-    playlistUrl.value = ''
-    playlistName.value = ''
-    await refresh()
-  }
-  catch (e) {
-    error.value = e.data?.message || e.message || 'Failed to import playlist'
-  }
-
-  extracting.value = false
-}
-
-async function handleDelete(id) {
-  if (!confirm('Delete this playlist?')) return
-
-  try {
-    await $fetch(`/api/playlists/${id}`, { method: 'DELETE' })
-    await refresh()
-  }
-  catch (e) {
-    error.value = e.data?.message || 'Failed to delete playlist'
-  }
-}
+const libraryStats = computed(() => libraryData.value?.stats)
+const playlistCount = computed(() => playlists.value?.length || 0)
+const pendingCount = computed(() => libraryData.value?.pendingTracks?.length || 0)
+const offlineCount = computed(() => libraryStats.value?.byStatus?.find(s => s.status === 'offline')?.count || 0)
 </script>
-
-<style scoped>
-.playlists-page {
-  display: flex;
-  flex-direction: column;
-  gap: 30px;
-}
-
-.page-header h1 {
-  font-size: 1.8rem;
-  color: #eee;
-  margin-bottom: 10px;
-}
-
-h2 {
-  font-size: 1.2rem;
-  margin-bottom: 20px;
-  color: #aaa;
-}
-
-.import-section {
-  background: #16213e;
-  padding: 24px;
-  border-radius: 12px;
-}
-
-.import-form {
-  display: flex;
-  gap: 10px;
-}
-
-.import-form input:first-child {
-  flex: 2;
-}
-
-.import-form input:nth-child(2) {
-  flex: 1;
-}
-
-.error {
-  margin-top: 16px;
-  padding: 12px 16px;
-  background: #ff475722;
-  border: 1px solid #ff4757;
-  border-radius: 8px;
-  color: #ff4757;
-}
-
-.loading, .empty {
-  color: #666;
-  text-align: center;
-  padding: 40px;
-}
-
-.playlist-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 20px;
-}
-</style>
