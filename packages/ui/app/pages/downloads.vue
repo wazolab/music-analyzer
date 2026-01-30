@@ -7,50 +7,6 @@
       </button>
     </header>
 
-    <!-- Output Selection -->
-    <div class="output-section">
-      <div class="output-row">
-        <label>Output destination:</label>
-        <select v-model="selectedVolume" class="volume-select" @change="onVolumeChange">
-          <option value="">Select external drive...</option>
-          <option v-for="vol in volumes" :key="vol.path" :value="vol.path">
-            {{ vol.label }} ({{ vol.available }} free)
-          </option>
-        </select>
-        <span v-if="volumes.length === 0" class="no-volumes">
-          No external drives detected
-        </span>
-      </div>
-
-      <!-- Folder Browser -->
-      <div v-if="selectedVolume" class="folder-browser">
-        <div class="current-path">
-          <span class="path-label">Path:</span>
-          <span class="path-value">{{ outputPath }}</span>
-        </div>
-        <div class="folder-nav">
-          <button
-            v-if="currentPath !== selectedVolume"
-            @click="navigateUp"
-            class="nav-btn"
-          >
-            .. (up)
-          </button>
-          <div v-if="loadingFolders" class="loading-folders">Loading...</div>
-          <div v-else class="folder-list">
-            <button
-              v-for="folder in folders"
-              :key="folder.path"
-              @click="navigateTo(folder.path)"
-              class="folder-btn"
-            >
-              {{ folder.name }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <div v-if="pending" class="loading">Scanning downloads folder...</div>
     <div v-else-if="files.length === 0" class="empty">
       <p>No audio files found in downloads folder.</p>
@@ -83,7 +39,7 @@
           <button
             v-if="selectedFiles.size > 0"
             @click="startAnalysis"
-            :disabled="!outputPath || analyzing"
+            :disabled="analyzing"
             class="analyze-btn"
           >
             {{ analyzing ? 'Starting...' : `Analyze ${selectedFiles.size} files` }}
@@ -120,19 +76,12 @@
 <script setup>
 useHead({ title: 'Analyze Downloads' })
 
-const selectedVolume = ref('')
-const currentPath = ref('')
-const folders = ref([])
-const loadingFolders = ref(false)
 const selectedFiles = ref(new Set())
 const selectAll = ref(false)
 const analyzing = ref(false)
 const deleting = ref(false)
 const currentJob = ref(null)
 const refreshing = ref(false)
-
-// Computed output path (current browsed path)
-const outputPath = computed(() => currentPath.value || selectedVolume.value)
 
 // Fetch downloads
 const { data: downloadsData, pending, refresh } = await useFetch('/api/downloads', {
@@ -145,47 +94,6 @@ const files = computed(() => downloadsData.value?.files || [])
 const analyzedCount = computed(() =>
   files.value.filter(f => f.status === 'completed').length
 )
-
-// Fetch volumes
-const { data: volumes } = await useFetch('/api/volumes', {
-  default: () => []
-})
-
-// Browse folders
-async function browseFolders(path) {
-  loadingFolders.value = true
-  try {
-    folders.value = await $fetch('/api/volumes/browse', {
-      query: { path }
-    })
-  } catch (e) {
-    console.error('Failed to browse folders:', e)
-    folders.value = []
-  }
-  loadingFolders.value = false
-}
-
-function onVolumeChange() {
-  currentPath.value = selectedVolume.value
-  if (selectedVolume.value) {
-    browseFolders(selectedVolume.value)
-  } else {
-    folders.value = []
-  }
-}
-
-function navigateTo(path) {
-  currentPath.value = path
-  browseFolders(path)
-}
-
-function navigateUp() {
-  const parentPath = currentPath.value.split('/').slice(0, -1).join('/')
-  if (parentPath.startsWith('/media') || parentPath.startsWith('/mnt')) {
-    currentPath.value = parentPath
-    browseFolders(parentPath)
-  }
-}
 
 // Group files by folder
 const groupedFiles = computed(() => {
@@ -229,7 +137,7 @@ async function refreshFiles() {
 }
 
 async function startAnalysis() {
-  if (!outputPath.value || selectedFiles.value.size === 0) return
+  if (selectedFiles.value.size === 0) return
 
   analyzing.value = true
 
@@ -237,8 +145,7 @@ async function startAnalysis() {
     const response = await $fetch('/api/analyze/start', {
       method: 'POST',
       body: {
-        fileIds: Array.from(selectedFiles.value),
-        outputDir: outputPath.value
+        fileIds: Array.from(selectedFiles.value)
       }
     })
 
@@ -339,115 +246,6 @@ async function clearAnalyzed() {
 
 .refresh-btn:hover {
   background: #444;
-}
-
-.output-section {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  background: #16213e;
-  border-radius: 8px;
-}
-
-.output-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.output-row label {
-  color: #aaa;
-}
-
-.folder-browser {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 12px;
-  border-top: 1px solid #2a2a4a;
-}
-
-.current-path {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-family: monospace;
-  font-size: 0.9rem;
-}
-
-.path-label {
-  color: #666;
-}
-
-.path-value {
-  color: #00dc82;
-}
-
-.folder-nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-.nav-btn {
-  padding: 6px 12px;
-  background: #333;
-  color: #aaa;
-  font-size: 0.85rem;
-  border-radius: 4px;
-}
-
-.nav-btn:hover {
-  background: #444;
-  color: #eee;
-}
-
-.loading-folders {
-  color: #666;
-  font-size: 0.85rem;
-}
-
-.folder-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.folder-btn {
-  padding: 6px 12px;
-  background: #1a1a2e;
-  color: #8ac;
-  font-size: 0.85rem;
-  border: 1px solid #2a2a4a;
-  border-radius: 4px;
-}
-
-.folder-btn:hover {
-  background: #252545;
-  border-color: #3a3a5a;
-}
-
-.volume-select {
-  flex: 1;
-  max-width: 400px;
-  padding: 10px 12px;
-  background: #1a1a2e;
-  border: 1px solid #333;
-  border-radius: 6px;
-  color: #eee;
-  font-size: 0.95rem;
-}
-
-.volume-select:focus {
-  outline: none;
-  border-color: #00dc82;
-}
-
-.no-volumes {
-  color: #666;
-  font-size: 0.9rem;
 }
 
 .loading, .empty {

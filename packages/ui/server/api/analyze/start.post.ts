@@ -16,7 +16,7 @@ const runningJobs = new Map<number, ReturnType<typeof spawn>>()
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
-  const { fileIds, outputDir } = body as { fileIds: number[]; outputDir: string }
+  const { fileIds } = body as { fileIds: number[] }
 
   if (!fileIds || !Array.isArray(fileIds) || fileIds.length === 0) {
     throw createError({
@@ -25,15 +25,8 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  if (!outputDir || typeof outputDir !== 'string') {
-    throw createError({
-      statusCode: 400,
-      message: 'outputDir is required'
-    })
-  }
-
-  // Create job in database
-  const job = createAnalysisJob(outputDir)
+  // Create job in database (output dir not needed for genre-only analysis)
+  const job = createAnalysisJob('/tmp/analysis')
   setAnalysisJobFiles(job.id, fileIds)
 
   // Get file paths
@@ -56,17 +49,13 @@ export default defineEventHandler(async (event) => {
   }
 
   // Start the analyzer via docker run
-  // Both input and output need to be absolute paths for Docker
+  // Genre-only analysis - no output directory needed
   const args = [
     'run', '--rm',
     '--name', `analyzer-job-${job.id}`,
-    '-v', `${hostDownloadsDir}:/input`,
-    '-v', `${outputDir}:/output`,
+    '-v', `${hostDownloadsDir}:/input:ro`,
     'music-analyzer',
-    'analyze', '/input',
-    '-o', '/output',
-    '-c', '4',
-    '-w'
+    '/input'
   ]
 
   console.log(`Starting analysis job ${job.id}: docker ${args.join(' ')}`)
@@ -158,6 +147,25 @@ export default defineEventHandler(async (event) => {
       }
 
       // Try to parse JSON output for analysis results
+      // Format: __RESULT__: {"artist": "...", "title": "...", "genres": [...]}
+      if (line.includes('__RESULT__:')) {
+        try {
+          const jsonStr = line.split('__RESULT__:')[1].trim()
+          const result = JSON.parse(jsonStr)
+          if (result.artist && result.title && result.genres) {
+            const updated = matchAndUpdateTrackAnalysis(result.artist, result.title, {
+              tags: result.genres
+            })
+            if (updated > 0) {
+              console.log(`[Job ${job.id}] Updated ${updated} track(s): ${result.artist} - ${result.title}`)
+            }
+          }
+        } catch (e) {
+          // Ignore parse errors
+        }
+      }
+
+      // Legacy: Try to parse old JSON format with bpm/key
       if (line.includes('"bpm"') || line.includes('"key"')) {
         try {
           const jsonMatch = line.match(/\{[^{}]*"bpm"[^{}]*\}/g)
