@@ -26,8 +26,8 @@ COPY . .
 # Build the app
 RUN npm run build
 
-# Make runtime directories writable for non-root users
-RUN chmod -R 777 /app/.nuxt /app/.output /app/node_modules/.cache 2>/dev/null || true
+# Create data directory and make runtime directories writable for non-root users
+RUN mkdir -p /app/data && chmod -R 777 /app/.nuxt /app/.output /app/node_modules/.cache /app/data 2>/dev/null || true
 
 EXPOSE 3000
 
