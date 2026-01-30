@@ -12,7 +12,7 @@ services:
       - /app/.nuxt          # Preserve container's .nuxt build cache
       - ui-data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${DOWNLOADS_DIR:-./downloads}:/app/downloads:ro
+      - ${DOWNLOADS_DIR:-./downloads}:/app/downloads
       - /media:/media:rw
     environment:
       - NODE_ENV=development

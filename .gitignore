@@ -3,10 +3,10 @@ dist/
 .env
 models/
 
-# Soulseek directories
-downloads/
-incomplete/
-music/
+# Soulseek directories (root level only)
+/downloads/
+/incomplete/
+/music/
 
 # Database
 *.db
