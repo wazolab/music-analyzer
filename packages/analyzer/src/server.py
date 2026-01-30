@@ -13,6 +13,7 @@ import traceback
 from pathlib import Path
 from threading import Lock
 
+import numpy as np
 from flask import Flask, jsonify, request
 
 # Suppress TensorFlow warnings before importing analyzers
@@ -62,6 +63,27 @@ class AnalyzerService:
         self.energy.load()
         print("Loaded emomusic arousal model", file=sys.stderr)
         self._loaded = True
+        self._warmup()
+
+    def _warmup(self):
+        """Warm up models with dummy inference to pre-initialize TensorFlow graphs."""
+        print("Warming up models...", file=sys.stderr)
+        from analyzers.audio import AudioData
+
+        # Create 3 seconds of silence at 16kHz (ML models expect 16kHz)
+        dummy_audio = AudioData(
+            samples=np.zeros(16000 * 3, dtype=np.float32),
+            sample_rate=16000,
+            duration=3.0,
+        )
+
+        # Run dummy inference to initialize TensorFlow graphs
+        try:
+            self.genre.analyze(dummy_audio)
+            self.energy.analyze(dummy_audio)
+            print("Models warmed up", file=sys.stderr)
+        except Exception as e:
+            print(f"Warmup failed (non-critical): {e}", file=sys.stderr)
 
     def analyze(
         self,

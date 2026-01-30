@@ -120,12 +120,10 @@ async function processTracksAsync(
     // Check if job was cancelled
     if (!runningJobs.has(jobId)) {
       addLog('Job cancelled')
-      // Restore original status for remaining tracks
+      // Restore original status for all tracks (they were all marked as 'analyzing')
       for (const t of tracks) {
-        if (t.analysis_status === 'analyzing') {
-          const original = originalStatus.get(t.id) || 'pending'
-          updateLibraryTrackAnalysisStatus(t.id, original as any)
-        }
+        const original = originalStatus.get(t.id) || 'pending'
+        updateLibraryTrackAnalysisStatus(t.id, original as any)
       }
       return
     }

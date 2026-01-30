@@ -8,19 +8,18 @@ import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 
 @dataclass
 class MetadataResult:
     """Metadata from MusicBrainz lookup."""
 
-    title: Optional[str] = None
-    artist: Optional[str] = None
-    album: Optional[str] = None
-    label: Optional[str] = None
-    year: Optional[int] = None
-    musicbrainz_id: Optional[str] = None
+    title: str | None = None
+    artist: str | None = None
+    album: str | None = None
+    label: str | None = None
+    year: int | None = None
+    musicbrainz_id: str | None = None
     confidence: float = 0.0
 
 
@@ -61,7 +60,7 @@ def text_similarity(a: str, b: str) -> float:
     return len(intersection) / len(union)
 
 
-def get_fingerprint(file_path: str) -> tuple[Optional[str], Optional[int]]:
+def get_fingerprint(file_path: str) -> tuple[str | None, int | None]:
     """
     Generate audio fingerprint using fpcalc (Chromaprint).
 
@@ -94,7 +93,7 @@ def get_fingerprint(file_path: str) -> tuple[Optional[str], Optional[int]]:
 
 
 class MetadataLookup:
-    """Look up track metadata using AcoustID fingerprinting, MusicBrainz, Discogs, and Bandcamp."""
+    """Look up track metadata using AcoustID fingerprinting, MusicBrainz, Discogs, Bandcamp, and YouTube."""
 
     ACOUSTID_URL = "https://api.acoustid.org/v2/lookup"
     MUSICBRAINZ_URL = "https://musicbrainz.org/ws/2"
@@ -102,7 +101,7 @@ class MetadataLookup:
     BANDCAMP_SEARCH_URL = "https://bandcamp.com/search"
     USER_AGENT = "MusicAnalyzer/1.0 (https://github.com/music-analyzer)"
 
-    def __init__(self, acoustid_api_key: Optional[str] = None, discogs_token: Optional[str] = None):
+    def __init__(self, acoustid_api_key: str | None = None, discogs_token: str | None = None):
         """
         Initialize metadata lookup.
 
@@ -119,7 +118,7 @@ class MetadataLookup:
         self.discogs_token = discogs_token or os.environ.get("DISCOGS_TOKEN")
 
     def lookup(
-        self, file_path: str, hint_artist: Optional[str] = None, hint_title: Optional[str] = None
+        self, file_path: str, hint_artist: str | None = None, hint_title: str | None = None
     ) -> MetadataResult:
         """
         Look up metadata for an audio file.
@@ -128,7 +127,8 @@ class MetadataLookup:
         1. AcoustID + MusicBrainz (audio fingerprint) - most reliable
         2. Discogs search (artist + title) - fallback for niche tracks
         3. Bandcamp search (artist + title) - fallback for very niche electronic releases
-        4. Returns empty result if all fail
+        4. YouTube search (artist + title) - last resort for label uploads
+        5. Returns empty result if all fail
 
         Args:
             file_path: Path to audio file
@@ -181,15 +181,22 @@ class MetadataLookup:
             if result.title:
                 return result
 
+        # Fallback to YouTube search (last resort - for tracks uploaded by labels/artists)
+        if hint_artist and hint_title:
+            print("Bandcamp failed, trying YouTube...")
+            result = self._query_youtube(hint_artist, hint_title)
+            if result.title:
+                return result
+
         return MetadataResult()
 
     def _find_best_recording(
         self,
-        recordings: List[dict],
-        file_duration: int,
-        hint_artist: Optional[str],
-        hint_title: Optional[str],
-    ) -> Optional[str]:
+        recordings: list[dict],
+        file_duration: int | None,
+        hint_artist: str | None,
+        hint_title: str | None,
+    ) -> str | None:
         """
         Find the recording that best matches using:
         1. Duration (primary) - from audio analysis, objective
@@ -214,7 +221,7 @@ class MetadataLookup:
 
             # Duration score (0.0 to 1.0) - penalize recordings with different duration
             # Allow 5 seconds tolerance, then linear decrease
-            if rec_duration > 0 and file_duration > 0:
+            if rec_duration > 0 and file_duration is not None and file_duration > 0:
                 duration_diff = abs(rec_duration - file_duration)
                 if duration_diff <= 5:
                     duration_score = 1.0
@@ -242,15 +249,16 @@ class MetadataLookup:
 
         return best_id
 
-    def _query_acoustid(self, fingerprint: str, duration: int) -> Tuple[List[dict], float]:
+    def _query_acoustid(self, fingerprint: str, duration: int | None) -> tuple[list[dict], float]:
         """Query AcoustID API to get all MusicBrainz Recording matches with metadata."""
-        params = {
-            "client": self.api_key,
+        params: dict[str, str] = {
+            "client": self.api_key or "",
             "fingerprint": fingerprint,
-            "duration": str(duration),
             # Request recordings with full metadata for better matching
             "meta": "recordings",
         }
+        if duration is not None:
+            params["duration"] = str(duration)
 
         url = f"{self.ACOUSTID_URL}?{urllib.parse.urlencode(params)}"
 
@@ -278,7 +286,7 @@ class MetadataLookup:
             print(f"AcoustID query error: {e}")
             return [], 0.0
 
-    def _get_release_label(self, release_id: str) -> Optional[str]:
+    def _get_release_label(self, release_id: str) -> str | None:
         """Query MusicBrainz for release label info."""
         url = f"{self.MUSICBRAINZ_URL}/release/{release_id}?inc=labels&fmt=json"
 
@@ -365,6 +373,10 @@ class MetadataLookup:
                     release_id = best_release.get("id")
                     if release_id:
                         label = self._get_release_label(release_id)
+
+            # Clear album if it matches the title (likely a single release)
+            if album and title and text_similarity(album, title) > 0.8:
+                album = None
 
             return MetadataResult(title=title, artist=artist, album=album, label=label, year=year)
 
@@ -490,6 +502,10 @@ class MetadataLookup:
 
                 except Exception as e:
                     print(f"Discogs release details error: {e}")
+
+            # Clear album if it matches the title (likely a single release)
+            if album and found_title and text_similarity(album, found_title) > 0.8:
+                album = None
 
             return MetadataResult(
                 title=found_title,
@@ -712,10 +728,15 @@ class MetadataLookup:
             if not best_result or best_score < 0.3:
                 return MetadataResult()
 
+            # Clear album if it matches the title (likely a single release)
+            album = best_result["album"]
+            if album and best_result["title"] and text_similarity(album, best_result["title"]) > 0.8:
+                album = None
+
             return MetadataResult(
                 title=best_result["title"],
                 artist=best_result["artist"],
-                album=best_result["album"],
+                album=album,
                 label=best_result["label"],
                 year=best_result["year"],
                 confidence=best_score,
@@ -725,13 +746,196 @@ class MetadataLookup:
             print(f"Bandcamp query error: {e}")
             return MetadataResult()
 
+    def _query_youtube(self, artist: str, title: str) -> MetadataResult:
+        """
+        Query YouTube by scraping search results and video pages.
+
+        This is a last resort fallback for tracks uploaded by labels/artists.
+        Often contains metadata in video title and description.
+        """
+        # Clean up artist and title for search
+        clean_title = re.sub(r"\s*[\(\[]?\d{4}[\)\]]?\s*$", "", title).strip()
+        clean_artist = re.sub(r"\s+", " ", artist).strip()
+
+        query = f"{clean_artist} - {clean_title}"
+        params = {"search_query": query}
+
+        search_url = f"https://www.youtube.com/results?{urllib.parse.urlencode(params)}"
+
+        try:
+            time.sleep(0.5)  # Be respectful
+            req = urllib.request.Request(
+                search_url,
+                headers={
+                    "User-Agent": self.USER_AGENT,
+                    "Accept-Language": "en-US,en;q=0.9",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=10) as response:
+                html = response.read().decode()
+
+            # Extract video IDs from search results
+            # YouTube embeds data in a script tag as JSON
+            video_ids = re.findall(r'"videoId":"([a-zA-Z0-9_-]{11})"', html)
+            if not video_ids:
+                return MetadataResult()
+
+            # Remove duplicates while preserving order
+            seen = set()
+            unique_ids = []
+            for vid in video_ids:
+                if vid not in seen:
+                    seen.add(vid)
+                    unique_ids.append(vid)
+
+            # Try first few results to find best match
+            best_result = None
+            best_score = 0.0
+
+            for video_id in unique_ids[:5]:
+                time.sleep(0.3)  # Rate limit
+                try:
+                    video_url = f"https://www.youtube.com/watch?v={video_id}"
+                    req = urllib.request.Request(
+                        video_url,
+                        headers={
+                            "User-Agent": self.USER_AGENT,
+                            "Accept-Language": "en-US,en;q=0.9",
+                        },
+                    )
+                    with urllib.request.urlopen(req, timeout=10) as response:
+                        video_html = response.read().decode()
+
+                    # Extract video title
+                    title_match = re.search(r'"title":"([^"]+)"', video_html)
+                    if not title_match:
+                        continue
+                    video_title = title_match.group(1)
+                    # Unescape unicode
+                    video_title = video_title.encode().decode("unicode_escape")
+
+                    # Extract channel name (potential label)
+                    channel_match = re.search(r'"ownerChannelName":"([^"]+)"', video_html)
+                    channel_name = None
+                    if channel_match:
+                        channel_name = channel_match.group(1).encode().decode("unicode_escape")
+
+                    # Extract description
+                    desc_match = re.search(r'"shortDescription":"([^"]*)"', video_html)
+                    description = ""
+                    if desc_match:
+                        description = desc_match.group(1).encode().decode("unicode_escape")
+
+                    # Parse "Artist - Title" from video title
+                    found_artist = artist
+                    found_title = title
+                    if " - " in video_title:
+                        parts = video_title.split(" - ", 1)
+                        found_artist = parts[0].strip()
+                        found_title = parts[1].strip()
+                        # Remove common suffixes like [Official Video], (Lyric Video), etc.
+                        found_title = re.sub(
+                            r"\s*[\[\(](official|lyric|audio|music|video|visualizer|hd|hq|4k).*?[\]\)]",
+                            "",
+                            found_title,
+                            flags=re.IGNORECASE,
+                        ).strip()
+
+                    # Calculate similarity score
+                    artist_sim = text_similarity(artist, found_artist)
+                    title_sim = text_similarity(title, found_title)
+                    score = (artist_sim * 0.4) + (title_sim * 0.6)
+
+                    if score < 0.3:
+                        continue
+
+                    # Extract year from description or title
+                    year = None
+                    year_patterns = [
+                        r"(?:released?|out now|available).*?(\d{4})",
+                        r"©\s*(\d{4})",
+                        r"\((\d{4})\)",
+                        r"[\[\(](\d{4})[\]\)]",
+                    ]
+                    for pattern in year_patterns:
+                        year_match = re.search(pattern, description, re.IGNORECASE)
+                        if year_match:
+                            potential_year = int(year_match.group(1))
+                            if 1990 <= potential_year <= 2030:
+                                year = potential_year
+                                break
+                    if not year:
+                        for pattern in year_patterns:
+                            year_match = re.search(pattern, video_title, re.IGNORECASE)
+                            if year_match:
+                                potential_year = int(year_match.group(1))
+                                if 1990 <= potential_year <= 2030:
+                                    year = potential_year
+                                    break
+
+                    # Extract label from description
+                    label = None
+                    label_patterns = [
+                        r"(?:label|released on|released by|out on|available on)[:\s]+([^\n\r]+)",
+                        r"(?:℗|©)\s*\d{4}\s+([^\n\r]+)",
+                        r"\[([^\]]+)\]$",  # [Label Name] at end of title
+                    ]
+                    for pattern in label_patterns:
+                        label_match = re.search(pattern, description, re.IGNORECASE)
+                        if label_match:
+                            potential_label = label_match.group(1).strip()
+                            # Clean up label name
+                            potential_label = re.sub(r"https?://\S+", "", potential_label).strip()
+                            potential_label = re.sub(r"[,.]$", "", potential_label).strip()
+                            if potential_label and len(potential_label) < 50:
+                                label = potential_label
+                                break
+
+                    # Use channel name as label if it looks like a label (not an artist name)
+                    if not label and channel_name:
+                        # Channel is likely a label if it differs from artist
+                        if text_similarity(channel_name, found_artist) < 0.5:
+                            # Check if channel name looks like a label
+                            label_indicators = ["records", "music", "audio", "label", "recordings"]
+                            if any(ind in channel_name.lower() for ind in label_indicators):
+                                label = channel_name
+
+                    if score > best_score:
+                        best_score = score
+                        best_result = {
+                            "title": found_title,
+                            "artist": found_artist,
+                            "label": label,
+                            "year": year,
+                        }
+
+                except Exception as e:
+                    print(f"YouTube video fetch error: {e}")
+                    continue
+
+            if not best_result or best_score < 0.3:
+                return MetadataResult()
+
+            return MetadataResult(
+                title=best_result["title"],
+                artist=best_result["artist"],
+                album=None,  # YouTube doesn't typically have album info
+                label=best_result["label"],
+                year=best_result["year"],
+                confidence=best_score,
+            )
+
+        except Exception as e:
+            print(f"YouTube query error: {e}")
+            return MetadataResult()
+
 
 def lookup_metadata(
     file_path: str,
-    hint_artist: Optional[str] = None,
-    hint_title: Optional[str] = None,
-    api_key: Optional[str] = None,
-    discogs_token: Optional[str] = None,
+    hint_artist: str | None = None,
+    hint_title: str | None = None,
+    api_key: str | None = None,
+    discogs_token: str | None = None,
 ) -> MetadataResult:
     """
     Convenience function to look up metadata for a file.
@@ -740,6 +944,7 @@ def lookup_metadata(
     1. AcoustID + MusicBrainz (audio fingerprint) - most reliable
     2. Discogs search (artist + title) - fallback for niche tracks
     3. Bandcamp search (artist + title) - fallback for very niche electronic releases
+    4. YouTube search (artist + title) - last resort for label uploads
 
     Args:
         file_path: Path to audio file
@@ -759,7 +964,7 @@ def lookup_metadata(
         return MetadataResult()
 
 
-def lookup_by_musicbrainz_id(recording_id: str, api_key: Optional[str] = None) -> MetadataResult:
+def lookup_by_musicbrainz_id(recording_id: str, api_key: str | None = None) -> MetadataResult:
     """
     Look up metadata directly from MusicBrainz using a recording ID.
 
@@ -785,8 +990,8 @@ def submit_fingerprint_to_acoustid(
     fingerprint: str,
     duration: int,
     musicbrainz_id: str,
-    api_key: Optional[str] = None,
-    user_key: Optional[str] = None,
+    api_key: str | None = None,
+    user_key: str | None = None,
 ) -> bool:
     """
     Submit a fingerprint to AcoustID linked to a MusicBrainz recording.

@@ -84,7 +84,9 @@
           leadingIcon: 'text-warning',
           title: 'font-normal text-muted text-xs uppercase',
         }"
-        class="lg:rounded-none first:rounded-l-lg last:rounded-r-lg hover:z-1"
+        class="lg:rounded-none first:rounded-l-lg last:rounded-r-lg hover:z-1 cursor-pointer transition-all"
+        :class="{ 'ring-2 ring-warning': filterNotInAcoustid }"
+        @click="filterNotInAcoustid = !filterNotInAcoustid"
       >
         <span class="text-2xl font-semibold text-warning">{{ notInAcoustidCount }}</span>
       </UPageCard>
@@ -125,8 +127,7 @@
             <UCheckbox :model-value="selectedPending.has(track.id)" @click.stop @update:model-value="togglePendingSelect(track.id)" />
             <span class="flex-1 text-sm truncate">{{ getFilename(track.file_path) }}</span>
             <UBadge color="neutral" variant="subtle">{{ track.source === 'downloads' || !track.source ? 'SLSK Download' : track.source }}</UBadge>
-            <UBadge v-if="track.analysis_status === 'failed'" color="error" variant="subtle" size="xs">failed</UBadge>
-            <UBadge v-else-if="track.analysis_status === 'analyzing'" color="warning" variant="subtle" size="xs">analyzing</UBadge>
+            <UBadge v-if="track.analysis_status === 'failed'" color="error" variant="subtle">failed</UBadge>
           </div>
         </div>
       </div>
@@ -200,66 +201,13 @@
             <UBadge color="neutral" variant="subtle">{{ selectedGroupTracks.length }} tracks</UBadge>
           </div>
 
-          <UCard :ui="{ body: 'p-0' }">
-            <div class="overflow-x-auto">
-              <table class="w-full text-sm">
-                <thead class="border-b border-default bg-elevated/50">
-                  <tr>
-                    <th class="px-4 py-3 text-left font-medium">
-                      <UCheckbox :model-value="selectAllLibrary" @update:model-value="toggleSelectAllLibrary" />
-                    </th>
-                    <th class="px-4 py-3 text-left font-medium">Artist</th>
-                    <th class="px-4 py-3 text-left font-medium">Title</th>
-                    <th class="px-4 py-3 text-left font-medium">Album</th>
-                    <th class="px-4 py-3 text-left font-medium">Label</th>
-                    <th class="px-4 py-3 text-left font-medium">Year</th>
-                    <th class="px-4 py-3 text-left font-medium">BPM</th>
-                    <th class="px-4 py-3 text-left font-medium">Key</th>
-                    <th class="px-4 py-3 text-left font-medium">Energy</th>
-                    <th class="px-4 py-3 text-left font-medium">Storage</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-default">
-                  <tr
-                    v-for="row in selectedGroupTracks"
-                    :key="row.id"
-                    class="cursor-pointer hover:bg-elevated/50"
-                    :class="{ 'bg-elevated': selectedTracks.has(row.id) }"
-                    @click="toggleTrackSelect(row.id)"
-                  >
-                    <td class="px-4 py-3">
-                      <UCheckbox :model-value="selectedTracks.has(row.id)" @click.stop @update:model-value="toggleTrackSelect(row.id)" />
-                    </td>
-                    <td class="px-4 py-3">
-                      <div class="flex items-center gap-1">
-                        <UIcon v-if="!row.musicbrainz_id" name="i-lucide-help-circle" class="size-3.5 text-warning shrink-0" />
-                        <span>{{ row.artist || '-' }}</span>
-                      </div>
-                    </td>
-                    <td class="px-4 py-3">{{ row.title || '-' }}</td>
-                    <td class="px-4 py-3">{{ row.album || '-' }}</td>
-                    <td class="px-4 py-3">{{ row.label || '-' }}</td>
-                    <td class="px-4 py-3">{{ row.year || '-' }}</td>
-                    <td class="px-4 py-3">
-                      <UBadge v-if="row.bpm" color="warning" variant="subtle">{{ Math.round(row.bpm) }}</UBadge>
-                    </td>
-                    <td class="px-4 py-3">
-                      <UBadge v-if="row.key_notation" color="primary" variant="subtle">{{ row.key_notation }}</UBadge>
-                    </td>
-                    <td class="px-4 py-3">
-                      <UBadge v-if="row.energy" color="info" variant="subtle">E{{ row.energy }}</UBadge>
-                    </td>
-                    <td class="px-4 py-3">
-                      <UBadge v-if="row.storage_device" :color="row.storage_status === 'offline' ? 'error' : 'success'" variant="subtle" size="xs">
-                        {{ row.storage_status }}
-                      </UBadge>
-                      <span v-else class="text-muted">-</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </UCard>
+          <LibraryTable
+            :tracks="selectedGroupTracks"
+            :selected-tracks="selectedTracks"
+            :select-all="selectAllLibrary"
+            @toggle-select="toggleTrackSelect"
+            @update:select-all="toggleSelectAllLibrary"
+          />
         </div>
 
         <!-- Group Cards Grid -->
@@ -285,66 +233,14 @@
       </template>
 
       <!-- List View -->
-      <UCard v-else :ui="{ body: 'p-0' }">
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="border-b border-default bg-elevated/50">
-              <tr>
-                <th class="px-4 py-3 text-left font-medium">
-                  <UCheckbox :model-value="selectAllLibrary" @update:model-value="toggleSelectAllLibrary" />
-                </th>
-                <th class="px-4 py-3 text-left font-medium">Artist</th>
-                <th class="px-4 py-3 text-left font-medium">Title</th>
-                <th class="px-4 py-3 text-left font-medium">Album</th>
-                <th class="px-4 py-3 text-left font-medium">Label</th>
-                <th class="px-4 py-3 text-left font-medium">Year</th>
-                <th class="px-4 py-3 text-left font-medium">BPM</th>
-                <th class="px-4 py-3 text-left font-medium">Key</th>
-                <th class="px-4 py-3 text-left font-medium">Energy</th>
-                <th class="px-4 py-3 text-left font-medium">Storage</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-default">
-              <tr
-                v-for="row in filteredTracks"
-                :key="row.id"
-                class="cursor-pointer hover:bg-elevated/50"
-                :class="{ 'bg-elevated': selectedTracks.has(row.id) }"
-                @click="toggleTrackSelect(row.id)"
-              >
-                <td class="px-4 py-3">
-                  <UCheckbox :model-value="selectedTracks.has(row.id)" @click.stop @update:model-value="toggleTrackSelect(row.id)" />
-                </td>
-                <td class="px-4 py-3">
-                  <div class="flex items-center gap-1">
-                    <UIcon v-if="!row.musicbrainz_id" name="i-lucide-help-circle" class="size-3.5 text-warning shrink-0" />
-                    <span>{{ row.artist || '-' }}</span>
-                  </div>
-                </td>
-                <td class="px-4 py-3">{{ row.title || '-' }}</td>
-                <td class="px-4 py-3">{{ row.album || '-' }}</td>
-                <td class="px-4 py-3">{{ row.label || '-' }}</td>
-                <td class="px-4 py-3">{{ row.year || '-' }}</td>
-                <td class="px-4 py-3">
-                  <UBadge v-if="row.bpm" color="warning" variant="subtle">{{ Math.round(row.bpm) }}</UBadge>
-                </td>
-                <td class="px-4 py-3">
-                  <UBadge v-if="row.key_notation" color="primary" variant="subtle">{{ row.key_notation }}</UBadge>
-                </td>
-                <td class="px-4 py-3">
-                  <UBadge v-if="row.energy" color="info" variant="subtle">E{{ row.energy }}</UBadge>
-                </td>
-                <td class="px-4 py-3">
-                  <UBadge v-if="row.storage_device" :color="row.storage_status === 'offline' ? 'error' : 'success'" variant="subtle" size="xs">
-                    {{ row.storage_status }}
-                  </UBadge>
-                  <span v-else class="text-muted">-</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </UCard>
+      <LibraryTable
+        v-else
+        :tracks="filteredTracks"
+        :selected-tracks="selectedTracks"
+        :select-all="selectAllLibrary"
+        @toggle-select="toggleTrackSelect"
+        @update:select-all="toggleSelectAllLibrary"
+      />
     </template>
 
     <!-- Scan Modal -->
@@ -477,6 +373,8 @@
 </template>
 
 <script setup>
+import { getTopGenre, matchesGenreFilter } from '~/composables/useGenre'
+
 definePageMeta({ pageTitle: 'Library' })
 useHead({ title: 'Library' })
 
@@ -487,6 +385,7 @@ const filterGenre = ref('')
 const filterLabel = ref('')
 const filterYear = ref('')
 const filterStatus = ref('')
+const filterNotInAcoustid = ref(false)
 
 const viewTabs = [
   { label: 'By Genre', value: 'genre' },
@@ -542,6 +441,7 @@ const musicBrainzSearchUrl = computed(() => {
 })
 
 const { data: libraryData, pending, refresh } = await useFetch('/api/library', {
+  key: 'library-data',
   default: () => ({ tracks: [], pendingTracks: [], stats: { total: 0, byGenre: [], byLabel: [], byYear: [], byStatus: [] }, settings: {} }),
 })
 
@@ -554,15 +454,8 @@ const notInAcoustidCount = computed(() => tracks.value.filter(t => !t.musicbrain
 const uniqueGenres = computed(() => {
   const genres = new Set()
   for (const track of tracks.value) {
-    if (track.genres) {
-      try {
-        const parsed = typeof track.genres === 'string' ? JSON.parse(track.genres) : track.genres
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          genres.add(parsed[0].includes('---') ? parsed[0].split('---')[1] : parsed[0])
-        }
-      }
-      catch {}
-    }
+    const topGenre = getTopGenre(track.genres)
+    if (topGenre) genres.add(topGenre)
   }
   return Array.from(genres).sort()
 })
@@ -590,18 +483,12 @@ const filteredTracks = computed(() => {
     result = result.filter(t => t.artist?.toLowerCase().includes(query) || t.title?.toLowerCase().includes(query) || t.album?.toLowerCase().includes(query))
   }
   if (filterGenre.value) {
-    result = result.filter((t) => {
-      if (!t.genres) return false
-      try {
-        const parsed = typeof t.genres === 'string' ? JSON.parse(t.genres) : t.genres
-        return parsed.some(g => g.includes(filterGenre.value) || g.split('---')[1] === filterGenre.value)
-      }
-      catch { return false }
-    })
+    result = result.filter(t => matchesGenreFilter(t.genres, filterGenre.value))
   }
   if (filterLabel.value) result = result.filter(t => t.label === filterLabel.value)
   if (filterYear.value) result = result.filter(t => t.year === Number.parseInt(filterYear.value, 10))
   if (filterStatus.value) result = result.filter(t => t.storage_status === filterStatus.value)
+  if (filterNotInAcoustid.value) result = result.filter(t => !t.musicbrainz_id)
   return result
 })
 
@@ -609,12 +496,8 @@ const groupedTracks = computed(() => {
   const groups = new Map()
   for (const track of filteredTracks.value) {
     let key = 'Unknown'
-    if (viewMode.value === 'genre' && track.genres) {
-      try {
-        const parsed = typeof track.genres === 'string' ? JSON.parse(track.genres) : track.genres
-        if (Array.isArray(parsed) && parsed.length > 0) key = parsed[0].includes('---') ? parsed[0].split('---')[1] : parsed[0]
-      }
-      catch {}
+    if (viewMode.value === 'genre') {
+      key = getTopGenre(track.genres) || 'Unknown'
     }
     else if (viewMode.value === 'label') {
       key = track.label || 'Unknown Label'
@@ -778,7 +661,7 @@ function closeMusicBrainzModal() {
   showMusicBrainzModal.value = false
   linkingTrack.value = null
   musicBrainzId.value = ''
-  if (linkingResult.value?.success) refresh()
+  if (linkingResult.value?.success) refreshNuxtData('library-data')
   linkingResult.value = null
 }
 
@@ -788,7 +671,7 @@ async function linkToMusicBrainz() {
   linkingResult.value = null
   try {
     linkingResult.value = await $fetch('/api/library/link-musicbrainz', { method: 'POST', body: { trackId: linkingTrack.value.id, recordingId: musicBrainzId.value.trim(), submitFingerprint: musicBrainzSubmitFingerprint.value } })
-    if (linkingResult.value.success) await refresh()
+    if (linkingResult.value.success) await refreshNuxtData('library-data')
   }
   catch (e) {
     linkingResult.value = { success: false, error: e.data?.message || 'Failed to link' }

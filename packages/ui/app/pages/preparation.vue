@@ -28,7 +28,7 @@
       <!-- Prep List -->
       <template v-else>
         <div class="flex items-center gap-2">
-          <UBadge color="primary" variant="subtle">{{ prepList.length }} tracks</UBadge>
+          <UBadge color="neutral" variant="subtle">{{ prepList.length }} tracks</UBadge>
           <span class="text-sm text-muted">selected for preparation</span>
         </div>
 
@@ -124,6 +124,10 @@
 </template>
 
 <script setup>
+import { formatDuration } from '~/composables/useFormatters'
+import { getEmbedUrl } from '~/composables/useMedia'
+import { cleanForSearch } from '~/composables/useSearch'
+
 definePageMeta({ pageTitle: 'DJ Prep' })
 useHead({ title: 'DJ Prep' })
 
@@ -135,35 +139,7 @@ const { data: prepList, pending, refresh } = await useFetch('/api/preparation', 
   default: () => [],
 })
 
-const embedUrl = computed(() => {
-  if (!currentTrack.value?.source_url) return null
-  const url = currentTrack.value.source_url
-
-  if (url.includes('soundcloud.com')) {
-    return `https://w.soundcloud.com/player/?url=${encodeURIComponent(url)}&auto_play=true&hide_related=true&show_comments=false&show_user=false&show_reposts=false&visual=false`
-  }
-
-  if (url.includes('youtube.com') || url.includes('youtu.be')) {
-    const videoId = extractYouTubeId(url)
-    if (videoId) {
-      return `https://www.youtube.com/embed/${videoId}?autoplay=1`
-    }
-  }
-
-  return null
-})
-
-function extractYouTubeId(url) {
-  const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&?/]+)/)
-  return match ? match[1] : null
-}
-
-function formatDuration(seconds) {
-  if (!seconds) return ''
-  const mins = Math.floor(seconds / 60)
-  const secs = Math.floor(seconds % 60)
-  return `${mins}:${secs.toString().padStart(2, '0')}`
-}
+const embedUrl = computed(() => getEmbedUrl(currentTrack.value?.source_url))
 
 function togglePlay(track) {
   if (currentTrack.value?.track_id === track.track_id) {
@@ -176,14 +152,6 @@ function togglePlay(track) {
 
 function stopPlayback() {
   currentTrack.value = null
-}
-
-function cleanForSearch(text) {
-  return text
-    .toLowerCase()
-    .replace(/[^\w\s]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
 }
 
 async function copySearchText(track) {

@@ -73,6 +73,10 @@
 </template>
 
 <script setup>
+import { formatDuration } from '~/composables/useFormatters'
+import { getTopGenre } from '~/composables/useGenre'
+import { cleanForSearch } from '~/composables/useSearch'
+
 const props = defineProps({
   track: {
     type: Object,
@@ -96,32 +100,7 @@ const emit = defineEmits(['toggle-prep', 'toggle-play'])
 
 const copied = ref(false)
 
-const topGenre = computed(() => {
-  if (!props.track.tags || props.track.tags.length === 0) return null
-  let tags = props.track.tags
-  if (typeof tags === 'string') {
-    try {
-      tags = JSON.parse(tags)
-    }
-    catch {
-      return null
-    }
-  }
-  if (!Array.isArray(tags) || tags.length === 0) return null
-  const genre = tags[0]
-  if (genre.includes('---')) {
-    return genre.split('---')[1]
-  }
-  return genre
-})
-
-function cleanForSearch(text) {
-  return text
-    .toLowerCase()
-    .replace(/[^\w\s]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
+const topGenre = computed(() => getTopGenre(props.track.tags))
 
 async function copySearchText() {
   const searchText = cleanForSearch(`${props.track.artist} ${props.track.title}`)
@@ -136,12 +115,5 @@ function togglePrep() {
 
 function togglePlay() {
   emit('toggle-play', props.track)
-}
-
-function formatDuration(seconds) {
-  if (!seconds) return ''
-  const mins = Math.floor(seconds / 60)
-  const secs = Math.floor(seconds % 60)
-  return `${mins}:${secs.toString().padStart(2, '0')}`
 }
 </script>

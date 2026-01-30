@@ -14,7 +14,13 @@
           </h2>
         </template>
 
-        <div class="space-y-5">
+        <!-- Loading state -->
+        <div v-if="!job" class="py-8 text-center text-muted">
+          <UIcon name="i-lucide-loader-2" class="size-6 animate-spin mx-auto mb-2" />
+          Loading job status...
+        </div>
+
+        <div v-else class="space-y-5">
           <!-- Progress bar -->
           <UProgress
             :model-value="progressPercent"
@@ -74,12 +80,21 @@
             title="Analysis failed"
             description="Check logs above for details."
           />
+
+          <!-- Pending message -->
+          <div
+            v-if="job?.status === 'pending'"
+            class="flex items-center justify-center gap-2 text-muted"
+          >
+            <UIcon name="i-lucide-loader-2" class="size-4 animate-spin" />
+            <span>Preparing analysis...</span>
+          </div>
         </div>
 
         <template #footer>
           <div class="flex justify-center gap-3">
             <UButton
-              v-if="job?.status === 'running'"
+              v-if="job?.status === 'running' || job?.status === 'pending'"
               color="error"
               variant="soft"
               :loading="cancelling"
@@ -88,10 +103,10 @@
               Cancel
             </UButton>
             <UButton
-              v-if="job?.status === 'completed' || job?.status === 'failed' || job?.status === 'cancelled'"
+              v-if="!job || job?.status === 'completed' || job?.status === 'failed' || job?.status === 'cancelled'"
               @click="$emit('close')"
             >
-              Done
+              {{ !job ? 'Close' : 'Done' }}
             </UButton>
           </div>
         </template>

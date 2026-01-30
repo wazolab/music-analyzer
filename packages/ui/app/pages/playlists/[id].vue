@@ -39,7 +39,7 @@
                 View source
               </UButton>
               <ClientOnly>
-                <span class="text-muted">Updated {{ formatDate(playlist.updated_at) }}</span>
+                <span class="text-muted">Updated {{ formatDateFull(playlist.updated_at) }}</span>
               </ClientOnly>
             </div>
           </div>
@@ -121,6 +121,9 @@
 </template>
 
 <script setup>
+import { formatDateFull } from '~/composables/useFormatters'
+import { getEmbedUrl } from '~/composables/useMedia'
+
 definePageMeta({ pageTitle: 'Playlist Details' })
 
 const route = useRoute()
@@ -149,41 +152,7 @@ watch(prepList, (list) => {
   prepTrackIds.value = new Set(list.map(t => t.track_id))
 }, { immediate: true })
 
-// Generate embed URL for playback
-const embedUrl = computed(() => {
-  if (!currentTrack.value?.source_url) return null
-  const url = currentTrack.value.source_url
-
-  if (url.includes('soundcloud.com')) {
-    return `https://w.soundcloud.com/player/?url=${encodeURIComponent(url)}&auto_play=true&hide_related=true&show_comments=false&show_user=false&show_reposts=false&visual=false`
-  }
-
-  if (url.includes('youtube.com') || url.includes('youtu.be')) {
-    const videoId = extractYouTubeId(url)
-    if (videoId) {
-      return `https://www.youtube.com/embed/${videoId}?autoplay=1`
-    }
-  }
-
-  return null
-})
-
-function extractYouTubeId(url) {
-  const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&?/]+)/)
-  return match ? match[1] : null
-}
-
-function formatDate(dateStr) {
-  if (!dateStr) return ''
-  const date = new Date(dateStr + 'Z')
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
+const embedUrl = computed(() => getEmbedUrl(currentTrack.value?.source_url))
 
 async function syncPlaylist() {
   syncing.value = true
