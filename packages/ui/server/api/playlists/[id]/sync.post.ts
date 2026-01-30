@@ -38,7 +38,6 @@ export default defineEventHandler(async (event) => {
 })
 
 async function fetchTracksFromUrl(url: string): Promise<TrackInput[]> {
-  const isYouTube = url.includes('youtube.com') || url.includes('youtu.be')
   const { spawn } = await import('child_process')
 
   const args = [
@@ -46,13 +45,9 @@ async function fetchTracksFromUrl(url: string): Promise<TrackInput[]> {
     '--no-warnings',
     '--skip-download',
     '--no-playlist-reverse',
+    '--no-cookies-from-browser',
+    url
   ]
-
-  if (isYouTube) {
-    args.push('--cookies-from-browser', 'firefox')
-  }
-
-  args.push(url)
 
   const result = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
     const proc = spawn('yt-dlp', args, { maxBuffer: 50 * 1024 * 1024 } as any)
@@ -129,5 +124,6 @@ function parseTrackInfo(data: any): TrackInput | null {
     artist: artist || 'Unknown Artist',
     title,
     duration: data.duration,
+    source_url: data.webpage_url || data.url,
   }
 }

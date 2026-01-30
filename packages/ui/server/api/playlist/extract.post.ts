@@ -30,6 +30,7 @@ export default defineEventHandler(async (event) => {
       '--no-warnings',
       '--skip-download',
       '--no-playlist-reverse',
+      '--no-cookies-from-browser',
       url
     ]
 
