@@ -108,12 +108,21 @@ class AudioAnalyzer:
         self._log(f"\nTop 10 genres:")
         self._log(self.genre.format_predictions(genre_result))
 
+        # Correct half-time BPM for fast-tempo genres
+        bpm = rhythm_result.bpm
+        fast_genres = {"Juke", "Jungle", "Drum n Bass", "Footwork", "Breakcore", "Hardcore"}
+        detected_subgenres = {g.split("---")[1] if "---" in g else g for g in genre_result.top_genres[:3]}
+
+        if detected_subgenres & fast_genres and bpm < 100:
+            bpm = bpm * 2
+            self._log(f"Corrected half-time BPM: {rhythm_result.bpm} -> {bpm}")
+
         # Build result
         result = AnalysisResult(
             file=filename,
             artist=track_info.artist,
             title=track_info.title,
-            bpm=rhythm_result.bpm,
+            bpm=bpm,
             key=key_result.camelot,
             energy=energy_result.level,
             genres=genre_result.top_genres,

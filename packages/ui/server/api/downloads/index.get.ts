@@ -1,5 +1,5 @@
 import { readdir, stat, rename, rmdir } from 'fs/promises'
-import { join, basename, dirname, extname } from 'path'
+import { join, basename, dirname, extname, resolve } from 'path'
 import { existsSync } from 'fs'
 import { getAllDownloadFiles, upsertDownloadFile } from '../../utils/db'
 import type { DownloadFile } from '../../utils/types'
@@ -48,7 +48,12 @@ async function flattenFile(filePath: string): Promise<string> {
  * Remove empty directories recursively up to DOWNLOADS_DIR.
  */
 async function cleanEmptyDirs(dir: string): Promise<void> {
-  if (dir === DOWNLOADS_DIR || !dir.startsWith(DOWNLOADS_DIR)) return
+  const normalizedDir = resolve(dir)
+  const normalizedBase = resolve(DOWNLOADS_DIR)
+
+  if (normalizedDir === normalizedBase || !normalizedDir.startsWith(normalizedBase)) {
+    return
+  }
 
   try {
     const entries = await readdir(dir)
@@ -85,12 +90,16 @@ async function scanAndFlattenDirectory(dir: string): Promise<{
     try {
       const entries = await readdir(currentDir, { withFileTypes: true })
 
+      // Track this directory for cleanup if it's a subfolder
+      if (currentDir !== dir) {
+        dirsToClean.push(currentDir)
+      }
+
       for (const entry of entries) {
         const fullPath = join(currentDir, entry.name)
 
         if (entry.isDirectory()) {
           await scanDir(fullPath)
-          dirsToClean.push(fullPath)
         } else if (entry.isFile()) {
           const ext = extname(entry.name).toLowerCase()
           if (AUDIO_EXTENSIONS.includes(ext)) {
