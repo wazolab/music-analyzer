@@ -13,9 +13,9 @@ A Node.js/TypeScript CLI application that analyzes FLAC files, extracts audio fe
   - Beat grid / downbeat positions
 
 - **Metadata Lookup** (multiple sources)
-  - **Beatport**: BPM, key, genre, label (API or web scraping)
-  - **Bandcamp**: Artist, album, label, year (web scraping)
   - **MusicBrainz**: AcoustID fingerprinting + API
+  - **Discogs**: Artist, label, year (API fallback)
+  - **Bandcamp**: Artist, album, label, year (web scraping)
 
 - **Tag Writing**
   - Writes analysis results to FLAC Vorbis comments
@@ -195,15 +195,10 @@ cp .env.example .env
 2. Create an application at https://acoustid.org/new-application
 3. Add `ACOUSTID_API_KEY` to `.env`
 
-**Beatport API** (optional - web scraping used if not set):
-1. Email engineering@beatport.com to request OAuth2 credentials
-2. Add credentials to `.env`:
-   ```
-   BEATPORT_CLIENT_ID=xxx
-   BEATPORT_CLIENT_SECRET=xxx
-   BEATPORT_USERNAME=xxx
-   BEATPORT_PASSWORD=xxx
-   ```
+**Discogs** (optional - fallback for niche tracks):
+1. Go to https://www.discogs.com/settings/developers
+2. Generate a personal access token
+3. Add `DISCOGS_TOKEN` to `.env`
 
 **Bandcamp**: No API key needed (uses web scraping)
 
@@ -290,9 +285,9 @@ Input Folder (FLAC files)
          ▼
 ┌─────────────────────────────────────┐
 │ 2. METADATA LOOKUP (parallel)      │
-│    • Beatport ─┐                   │
-│    • Bandcamp ─┼─► First match wins│
-│    • MusicBrainz┘                  │
+│    • MusicBrainz─┐                 │
+│    • Discogs   ──┼─► First match   │
+│    • Bandcamp  ──┘                 │
 └─────────────────────────────────────┘
          │
          ▼
@@ -320,7 +315,7 @@ Input Folder (FLAC files)
 | Audio Analysis | Essentia.js (WASM) |
 | Genre Classification | TensorFlow.js (MusiCNN model) |
 | Fingerprinting | fpcalc (Chromaprint) |
-| Metadata API | AcoustID + MusicBrainz + Beatport + Bandcamp |
+| Metadata API | AcoustID + MusicBrainz + Discogs + Bandcamp |
 | FLAC Tags | music-metadata + flac-tagger |
 | CLI | Commander.js |
 | Parallelism | p-limit + Node.js worker_threads |
@@ -333,7 +328,7 @@ The genre classifier uses the MusiCNN model trained on the Discogs dataset with 
 
 Genres are determined in priority order:
 
-1. **Metadata lookup** (Beatport, Bandcamp) - Most reliable for electronic music
+1. **Metadata lookup** (MusicBrainz, Discogs, Bandcamp) - Most reliable for electronic music
 2. **ML + heuristics** - TensorFlow model refined with BPM/key heuristics
 3. **Existing FLAC tags** - Fallback to tags already in the file
 
@@ -381,7 +376,7 @@ The model is automatically downloaded on first run (~50MB).
 
 Labels are extracted using multiple methods in priority order:
 
-1. **Metadata lookup** - From Beatport, Bandcamp, or MusicBrainz
+1. **Metadata lookup** - From MusicBrainz, Discogs, or Bandcamp
 2. **Filename parsing** - Supports common naming patterns
 3. **Existing FLAC tags** - From the `LABEL` or `ORGANIZATION` tag
 
@@ -434,7 +429,6 @@ music-analyzer/
 │   │   ├── writer.ts         # Write FLAC tags
 │   │   ├── lookup.ts         # Unified metadata lookup
 │   │   ├── bandcamp.ts       # Bandcamp scraper
-│   │   ├── beatport.ts       # Beatport API/scraper
 │   │   └── musicbrainz.ts    # MusicBrainz API client
 │   ├── workers/
 │   │   ├── audio-worker.ts   # Worker thread for analysis

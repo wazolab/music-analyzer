@@ -1,0 +1,18 @@
+[project]
+name = "music-analyzer"
+version = "1.0.0"
+description = "Audio analyzer for BPM, key, energy, and genre classification"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]  # Errors, pyflakes, isort, warnings
+ignore = ["E501"]  # Line too long (handled by formatter)
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

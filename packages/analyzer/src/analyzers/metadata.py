@@ -500,8 +500,6 @@ class MetadataLookup:
 
         This is a fallback for very niche electronic releases not found elsewhere.
         """
-        import re
-
         # Clean up artist and title for better search
         # Remove years like (2025), [2025]
         clean_title = re.sub(r'\s*[\(\[]?\d{4}[\)\]]?\s*$', '', title).strip()

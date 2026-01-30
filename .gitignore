@@ -3,6 +3,10 @@ dist/
 .env
 models/
 
+# Nuxt build output
+.nuxt/
+.output/
+
 # Soulseek directories (root level only)
 /downloads/
 /incomplete/

@@ -9,6 +9,9 @@
     "build": "npm run build --workspace=packages/analyzer && npm run build --workspace=packages/ui",
     "build:analyzer": "npm run build --workspace=packages/analyzer",
     "build:ui": "npm run build --workspace=packages/ui",
-    "analyze": "npm start --workspace=packages/analyzer --"
+    "analyze": "npm start --workspace=packages/analyzer --",
+    "lint": "npm run lint --workspace=packages/ui && cd packages/analyzer && ruff check .",
+    "lint:fix": "npm run lint:fix --workspace=packages/ui && cd packages/analyzer && ruff check --fix . && ruff format .",
+    "format": "npm run lint:fix"
   }
 }

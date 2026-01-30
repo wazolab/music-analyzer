@@ -2,9 +2,18 @@
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
+
+  modules: ['@nuxt/eslint'],
+
+  eslint: {
+    config: {
+      stylistic: true,
+    },
+  },
+
   app: {
     head: {
-      titleTemplate: '%s - Music Pipeline'
-    }
-  }
+      titleTemplate: '%s - Music Pipeline',
+    },
+  },
 })

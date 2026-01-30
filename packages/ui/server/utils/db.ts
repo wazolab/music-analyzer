@@ -502,8 +502,4 @@ export function deleteDownloadFile(id: number): boolean {
   return result.changes > 0
 }
 
-export function clearDownloadFiles(): void {
-  db.prepare('DELETE FROM download_files').run()
-}
-
 export default db

@@ -45,7 +45,6 @@
 const route = useRoute()
 const slskdStatus = ref('checking')
 const loading = ref(false)
-const error = ref('')
 
 onMounted(async () => {
   await checkSlskdStatus()
@@ -66,8 +65,8 @@ async function startSlskd() {
     await $fetch('/api/slskd/start', { method: 'POST' })
     await new Promise(r => setTimeout(r, 3000))
     await checkSlskdStatus()
-  } catch (e) {
-    error.value = 'Failed to start slskd'
+  } catch {
+    // Status will remain as-is on failure
   }
   loading.value = false
 }
@@ -78,8 +77,8 @@ async function stopSlskd() {
     await $fetch('/api/slskd/stop', { method: 'POST' })
     await new Promise(r => setTimeout(r, 1000))
     await checkSlskdStatus()
-  } catch (e) {
-    error.value = 'Failed to stop slskd'
+  } catch {
+    // Status will remain as-is on failure
   }
   loading.value = false
 }
