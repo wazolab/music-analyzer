@@ -6,8 +6,8 @@ import type { Playlist, Track, TrackStatus, TrackInput, PrepTrack } from './type
 // Analysis job operations
 import type { AnalysisJob, DownloadFile, DownloadFileStatus, AnalysisJobStatus } from './types'
 
-// Use /app/data in Docker, otherwise cwd
-const dataDir = process.env.NODE_ENV === 'production' ? '/app/data' : process.cwd()
+// Use DATA_DIR env var, or /app/data in Docker, otherwise cwd
+const dataDir = process.env.DATA_DIR || (process.env.NODE_ENV === 'production' ? '/app/data' : process.cwd())
 if (!existsSync(dataDir)) {
   mkdirSync(dataDir, { recursive: true })
 }

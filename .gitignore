@@ -7,7 +7,7 @@ models/
 .nuxt/
 .output/
 
-# Soulseek directories (root level only)
+# Soulseek directories
 /downloads/
 /incomplete/
 /music/

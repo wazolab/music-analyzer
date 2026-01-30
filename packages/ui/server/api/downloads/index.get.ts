@@ -2,10 +2,11 @@ import { readdir, stat, rename, rmdir } from 'fs/promises'
 import { join, basename, dirname, extname, resolve } from 'path'
 import { existsSync } from 'fs'
 import { getAllDownloadFiles, upsertDownloadFile, cleanupStaleDownloadFiles } from '../../utils/db'
+import { needsConversion, convertToFlac } from '../../utils/converter'
 import type { DownloadFile } from '../../utils/types'
 
-// Audio file extensions to look for
-const AUDIO_EXTENSIONS = ['.flac', '.mp3', '.wav', '.aiff', '.m4a', '.ogg']
+// Audio file extensions to look for (including convertible formats)
+const AUDIO_EXTENSIONS = ['.flac', '.mp3', '.wav', '.aiff', '.m4a', '.ogg', '.aac', '.opus', '.wma']
 
 // Downloads directory - in Docker it's /app/downloads, locally ./downloads
 const DOWNLOADS_DIR = process.env.DOWNLOADS_DIR
@@ -108,7 +109,16 @@ async function scanAndFlattenDirectory(dir: string): Promise<{
           if (AUDIO_EXTENSIONS.includes(ext)) {
             try {
               // Flatten file to root if in subfolder
-              const finalPath = await flattenFile(fullPath)
+              let finalPath = await flattenFile(fullPath)
+
+              // Convert to FLAC if needed
+              if (needsConversion(finalPath)) {
+                const result = await convertToFlac(finalPath, true, true)
+                if (result.success) {
+                  finalPath = result.path
+                }
+              }
+
               const stats = await stat(finalPath)
 
               files.push({

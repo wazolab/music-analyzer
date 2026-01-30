@@ -16,6 +16,8 @@ services:
       - /media:/media:rw
     environment:
       - NODE_ENV=development
+      - DATA_DIR=/app/data
+      - DOWNLOADS_DIR=/app/downloads
       - HOST_DOWNLOADS_DIR=${DOWNLOADS_DIR:-${PWD}/downloads}
     depends_on:
       - slskd
