@@ -158,7 +158,7 @@
                 <div v-if="track.album" class="text-sm text-muted truncate">{{ track.album }}</div>
               </div>
               <div class="flex gap-1.5 shrink-0">
-                <UBadge v-if="track.bpm" color="warning" variant="subtle">{{ Math.round(track.bpm) }}</UBadge>
+                <UBadge v-if="track.bpm" color="warning" variant="subtle">{{ Math.round(track.bpm) }} BPM</UBadge>
                 <UBadge v-if="track.key_notation" color="primary" variant="subtle">{{ track.key_notation }}</UBadge>
                 <UBadge v-if="track.energy" color="info" variant="subtle">E{{ track.energy }}</UBadge>
               </div>
@@ -309,8 +309,9 @@
           </template>
 
           <div class="space-y-4">
-            <div v-if="linkingTrack" class="p-3 rounded-lg bg-elevated text-sm">
-              {{ linkingTrack.artist || 'Unknown' }} - {{ linkingTrack.title || 'Unknown' }}
+            <div v-if="linkingTrack" class="p-3 rounded-lg border border-default">
+              <div class="text-sm text-muted mb-1">Track</div>
+              <div class="font-medium">{{ linkingTrack.artist || 'Unknown' }} - {{ linkingTrack.title || getFilename(linkingTrack.file_path) }}</div>
             </div>
 
             <UAlert v-if="linkingResult?.success" color="success" variant="soft">
@@ -321,9 +322,22 @@
             <UAlert v-if="linkingResult && !linkingResult.success" color="error" variant="soft" :title="linkingResult.error" />
 
             <template v-if="!linkingResult?.success">
-              <UFormField label="MusicBrainz Recording ID" hint="Find the recording on MusicBrainz and copy the ID">
-                <UInput v-model="musicBrainzId" placeholder="943e90e3-0665-4b96-8163-b528eaef22cc" :disabled="linkingInProgress" />
-              </UFormField>
+              <div class="space-y-2">
+                <label class="block text-sm font-medium">MusicBrainz Recording ID</label>
+                <UInput v-model="musicBrainzId" placeholder="e.g. 943e90e3-0665-4b96-8163-b" :disabled="linkingInProgress" />
+                <p class="text-xs text-muted">
+                  <a
+                    :href="musicBrainzSearchUrl"
+                    target="_blank"
+                    class="text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    <UIcon name="i-lucide-external-link" class="size-3" />
+                    Search on MusicBrainz
+                  </a>
+                  <span class="mx-1">-</span>
+                  Find the recording and copy the ID from the URL
+                </p>
+              </div>
 
               <UCheckbox v-model="musicBrainzSubmitFingerprint" label="Submit fingerprint to AcoustID" :disabled="linkingInProgress" />
             </template>
@@ -404,6 +418,12 @@ const musicBrainzSubmitFingerprint = ref(true)
 const linkingTrack = ref(null)
 const linkingInProgress = ref(false)
 const linkingResult = ref(null)
+
+const musicBrainzSearchUrl = computed(() => {
+  if (!linkingTrack.value) return 'https://musicbrainz.org/search?type=recording'
+  const query = [linkingTrack.value.artist, linkingTrack.value.title].filter(Boolean).join(' ')
+  return `https://musicbrainz.org/search?type=recording&query=${encodeURIComponent(query)}`
+})
 
 const { data: libraryData, pending, refresh } = await useFetch('/api/library', {
   default: () => ({ tracks: [], pendingTracks: [], stats: { total: 0, byGenre: [], byLabel: [], byYear: [], byStatus: [] }, settings: {} }),
