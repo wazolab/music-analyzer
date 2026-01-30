@@ -51,6 +51,19 @@
           >{{ offlineCount }}</span>
           <span class="stat-label">Offline</span>
         </div>
+        <div
+          class="stat"
+          title="Tracks not linked to AcoustID/MusicBrainz"
+        >
+          <span
+            class="stat-value"
+            :class="{ 'not-in-acoustid': notInAcoustidCount > 0 }"
+          >
+            <span class="no-acoustid-icon stat-icon">?</span>
+            {{ notInAcoustidCount }}
+          </span>
+          <span class="stat-label">Not in AcoustID</span>
+        </div>
       </div>
       <div
         v-if="selectedTracks.size > 0"
@@ -262,6 +275,19 @@
       >
         List
       </button>
+      <span class="tab-separator" />
+      <button
+        class="tab filter-tab"
+        :class="{ active: filterMissingAcoustid }"
+        @click="filterMissingAcoustid = !filterMissingAcoustid"
+      >
+        <span class="no-acoustid-icon tab-icon">?</span>
+        Missing AcoustID
+        <span
+          v-if="notInAcoustidCount > 0"
+          class="tab-count"
+        >{{ notInAcoustidCount }}</span>
+      </button>
     </div>
 
     <div
@@ -318,6 +344,11 @@
                     class="offline-icon"
                     title="File offline"
                   >&#128274;</span>
+                  <span
+                    v-if="!track.musicbrainz_id"
+                    class="no-acoustid-icon"
+                    title="Not in AcoustID"
+                  >?</span>
                   {{ track.artist || 'Unknown Artist' }} - {{ track.title || 'Unknown Title' }}
                 </span>
                 <span
@@ -384,7 +415,14 @@
                   @click.stop="toggleTrackSelect(track.id)"
                 >
               </td>
-              <td>{{ track.artist || '-' }}</td>
+              <td>
+                <span
+                  v-if="!track.musicbrainz_id"
+                  class="no-acoustid-icon"
+                  title="Not in AcoustID"
+                >?</span>
+                {{ track.artist || '-' }}
+              </td>
               <td>{{ track.title || '-' }}</td>
               <td>{{ track.album || '-' }}</td>
               <td>{{ track.label || '-' }}</td>
@@ -665,6 +703,7 @@ const filterGenre = ref('')
 const filterLabel = ref('')
 const filterYear = ref('')
 const filterStatus = ref('')
+const filterMissingAcoustid = ref(false)
 
 // Scan modal
 const showScanModal = ref(false)
@@ -719,6 +758,10 @@ const stats = computed(() => libraryData.value?.stats)
 const offlineCount = computed(() => {
   const statusStat = stats.value?.byStatus?.find(s => s.status === 'offline')
   return statusStat?.count || 0
+})
+
+const notInAcoustidCount = computed(() => {
+  return tracks.value.filter(t => !t.musicbrainz_id).length
 })
 
 // Extract unique values for filters (only primary genre per track)
@@ -795,6 +838,10 @@ const filteredTracks = computed(() => {
 
   if (filterStatus.value) {
     result = result.filter(t => t.storage_status === filterStatus.value)
+  }
+
+  if (filterMissingAcoustid.value) {
+    result = result.filter(t => !t.musicbrainz_id)
   }
 
   return result
@@ -1220,6 +1267,16 @@ const singleSelectedTrack = computed(() => {
   color: #ff4757;
 }
 
+.stat-value.not-in-acoustid {
+  color: #ffa502;
+}
+
+.stat-value .stat-icon {
+  font-size: 0.9rem;
+  vertical-align: baseline;
+  margin-right: 2px;
+}
+
 .stat-label {
   font-size: 0.85rem;
   color: #666;
@@ -1500,6 +1557,47 @@ const singleSelectedTrack = computed(() => {
   color: #fff;
 }
 
+.tab-separator {
+  width: 1px;
+  height: 20px;
+  background: #333;
+  margin: 0 8px;
+  align-self: center;
+}
+
+.tab.filter-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tab.filter-tab.active {
+  background: #ffa502;
+  color: #1a1a2e;
+}
+
+.tab.filter-tab .tab-icon {
+  width: 14px;
+  height: 14px;
+  font-size: 0.6rem;
+}
+
+.tab.filter-tab.active .tab-icon {
+  background: rgba(26, 26, 46, 0.3);
+  color: #1a1a2e;
+}
+
+.tab-count {
+  font-size: 0.75rem;
+  padding: 1px 6px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+}
+
+.tab.filter-tab.active .tab-count {
+  background: rgba(26, 26, 46, 0.2);
+}
+
 /* Loading & Empty */
 .loading {
   color: #666;
@@ -1606,6 +1704,21 @@ const singleSelectedTrack = computed(() => {
 .offline-icon {
   margin-right: 4px;
   font-size: 0.8rem;
+}
+
+.no-acoustid-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #ffa502;
+  background: rgba(255, 165, 2, 0.2);
+  border-radius: 50%;
+  vertical-align: middle;
 }
 
 .track-album {
