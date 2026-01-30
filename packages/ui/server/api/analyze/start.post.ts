@@ -49,12 +49,13 @@ export default defineEventHandler(async (event) => {
   }
 
   // Start the analyzer via docker run
-  // Genre-only analysis - no output directory needed
+  // Mount as read-write to allow tag writing
   const args = [
     'run', '--rm',
     '--name', `analyzer-job-${job.id}`,
-    '-v', `${hostDownloadsDir}:/input:ro`,
+    '-v', `${hostDownloadsDir}:/input`,
     'music-analyzer',
+    '--write-tags',
     '/input'
   ]
 

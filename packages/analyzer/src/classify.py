@@ -3,6 +3,9 @@
 Audio analyzer CLI - Extract BPM, key, energy, and genre from audio files.
 
 Uses Essentia's Discogs-Effnet models for genre classification.
+
+TODO: Audio is loaded twice (44100Hz for BPM/key, 16000Hz for genre model).
+      Could resample in memory instead for better performance.
 """
 
 import argparse
@@ -18,6 +21,8 @@ from analyzers import (
     KeyAnalyzer,
     EnergyAnalyzer,
     GenreClassifier,
+    AudioTagger,
+    TagData,
 )
 from utils import parse_filename, find_audio_files
 
@@ -43,12 +48,14 @@ class AnalysisResult:
 class AudioAnalyzer:
     """Main analyzer orchestrating all analysis modules."""
 
-    def __init__(self, verbose: bool = True):
+    def __init__(self, verbose: bool = True, write_tags: bool = False):
         self.verbose = verbose
+        self.write_tags = write_tags
         self.rhythm = RhythmAnalyzer()
         self.key = KeyAnalyzer()
         self.energy = EnergyAnalyzer()
         self.genre = GenreClassifier()
+        self.tagger = AudioTagger()
 
     def load_models(self) -> "AudioAnalyzer":
         """Load ML models. Call before analyzing."""
@@ -111,6 +118,20 @@ class AudioAnalyzer:
             energy=energy_result.level,
             genres=genre_result.top_genres,
         )
+
+        # Write tags to file if enabled
+        if self.write_tags:
+            self._log("Writing tags to file...")
+            tag_data = TagData(
+                bpm=result.bpm,
+                key=result.key,
+                energy=result.energy,
+                genres=result.genres,
+            )
+            if self.tagger.write(file_path, tag_data):
+                self._log("✔ Tags written successfully")
+            else:
+                self._log("✗ Failed to write tags")
 
         # Output JSON for UI parsing
         self._log(f"\n__RESULT__: {result.to_json()}")
@@ -176,6 +197,11 @@ def main():
         action="store_true",
         help="Suppress verbose output"
     )
+    parser.add_argument(
+        "-w", "--write-tags",
+        action="store_true",
+        help="Write analysis results to file metadata (for Traktor/Serato)"
+    )
 
     args = parser.parse_args()
 
@@ -184,7 +210,7 @@ def main():
         return
 
     # Initialize analyzer
-    analyzer = AudioAnalyzer(verbose=not args.quiet)
+    analyzer = AudioAnalyzer(verbose=not args.quiet, write_tags=args.write_tags)
     analyzer.load_models()
 
     input_path = Path(args.input)

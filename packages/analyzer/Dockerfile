@@ -6,8 +6,8 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Install essentia with TensorFlow support
-RUN pip3 install essentia-tensorflow
+# Install essentia with TensorFlow support and mutagen for tag writing
+RUN pip3 install essentia-tensorflow mutagen
 
 WORKDIR /app
 
