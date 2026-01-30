@@ -11,6 +11,7 @@
   - Run `npm update` to update Node.js dependencies
   - Check for breaking changes in essentia.js and TensorFlow.js if audio analysis fails
 - **Use industry standards**: For audio analysis, prefer Essentia's built-in algorithms and industry standards (e.g., EBU R128 for loudness) over custom calculations. Essentia algorithms are well-tested and produce reliable, standardized results.
+- **Quality checks**: After every feature implementation, run lint and format checks to ensure code quality.
 
 ## Overview
 
