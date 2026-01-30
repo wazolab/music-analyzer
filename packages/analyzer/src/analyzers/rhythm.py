@@ -12,6 +12,7 @@ from .audio import AudioData
 @dataclass
 class RhythmResult:
     """Result of rhythm analysis."""
+
     bpm: int
     confidence: float
     beats: List[float]  # Beat positions in seconds
@@ -45,5 +46,5 @@ class RhythmAnalyzer:
         return RhythmResult(
             bpm=round(bpm),
             confidence=float(confidence),
-            beats=beats.tolist() if isinstance(beats, np.ndarray) else list(beats)
+            beats=beats.tolist() if isinstance(beats, np.ndarray) else list(beats),
         )

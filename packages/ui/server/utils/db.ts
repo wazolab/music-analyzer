@@ -3,6 +3,9 @@ import { join } from 'path'
 import { existsSync, mkdirSync } from 'fs'
 import type { Playlist, Track, TrackStatus, TrackInput, PrepTrack } from './types'
 
+// Analysis job operations
+import type { AnalysisJob, DownloadFile, DownloadFileStatus, AnalysisJobStatus } from './types'
+
 // Use /app/data in Docker, otherwise cwd
 const dataDir = process.env.NODE_ENV === 'production' ? '/app/data' : process.cwd()
 if (!existsSync(dataDir)) {
@@ -49,43 +52,50 @@ db.exec(`
 // Migration: add source_url column if missing
 try {
   db.exec('ALTER TABLE tracks ADD COLUMN source_url TEXT')
-} catch (e) {
+}
+catch (e) {
   // Column already exists
 }
 
 // Migration: add tags column if missing
 try {
   db.exec('ALTER TABLE tracks ADD COLUMN tags TEXT')
-} catch (e) {
+}
+catch (e) {
   // Column already exists
 }
 
 // Migration: add analysis columns to tracks
 try {
   db.exec('ALTER TABLE tracks ADD COLUMN bpm REAL')
-} catch (e) {
+}
+catch (e) {
   // Column already exists
 }
 try {
   db.exec('ALTER TABLE tracks ADD COLUMN key_notation TEXT')
-} catch (e) {
+}
+catch (e) {
   // Column already exists
 }
 try {
   db.exec('ALTER TABLE tracks ADD COLUMN energy REAL')
-} catch (e) {
+}
+catch (e) {
   // Column already exists
 }
 try {
   db.exec('ALTER TABLE tracks ADD COLUMN analyzed_at TEXT')
-} catch (e) {
+}
+catch (e) {
   // Column already exists
 }
 
 // Migration: Add logs column to analysis_jobs
 try {
   db.exec('ALTER TABLE analysis_jobs ADD COLUMN logs TEXT')
-} catch (e) {
+}
+catch (e) {
   // Column already exists
 }
 
@@ -173,7 +183,7 @@ export function deletePlaylist(id: number): boolean {
 }
 
 export function updatePlaylistTimestamp(id: number): void {
-  db.prepare("UPDATE playlists SET updated_at = datetime('now') WHERE id = ?").run(id)
+  db.prepare('UPDATE playlists SET updated_at = datetime(\'now\') WHERE id = ?').run(id)
 }
 
 // Track operations
@@ -260,7 +270,8 @@ export function addToPreparationList(trackId: number): boolean {
   try {
     db.prepare('INSERT INTO preparation_list (track_id) VALUES (?)').run(trackId)
     return true
-  } catch {
+  }
+  catch {
     // Already in list (UNIQUE constraint)
     return false
   }
@@ -315,7 +326,7 @@ export function updateTrackAnalysis(id: number, data: {
 
   if (updates.length === 0) return false
 
-  updates.push("analyzed_at = datetime('now')")
+  updates.push('analyzed_at = datetime(\'now\')')
   values.push(id)
 
   const result = db.prepare(`UPDATE tracks SET ${updates.join(', ')} WHERE id = ?`).run(...values)
@@ -352,9 +363,6 @@ export function matchAndUpdateTrackAnalysis(artist: string, title: string, data:
   return updated
 }
 
-// Analysis job operations
-import type { AnalysisJob, DownloadFile, DownloadFileStatus, AnalysisJobStatus } from './types'
-
 export function createAnalysisJob(outputDir: string): AnalysisJob {
   const result = db.prepare(`
     INSERT INTO analysis_jobs (output_dir, status)
@@ -375,13 +383,15 @@ export function updateAnalysisJobStatus(id: number, status: AnalysisJobStatus, c
       SET status = ?, current_file = ?, started_at = COALESCE(started_at, datetime('now'))
       WHERE id = ?
     `).run(status, currentFile, id)
-  } else if (status === 'completed' || status === 'failed' || status === 'cancelled') {
+  }
+  else if (status === 'completed' || status === 'failed' || status === 'cancelled') {
     db.prepare(`
       UPDATE analysis_jobs
       SET status = ?, completed_at = datetime('now')
       WHERE id = ?
     `).run(status, id)
-  } else {
+  }
+  else {
     db.prepare('UPDATE analysis_jobs SET status = ? WHERE id = ?').run(status, id)
   }
 }
@@ -390,7 +400,7 @@ export function updateAnalysisJobProgress(
   id: number,
   completed: number,
   failed: number,
-  total?: number
+  total?: number,
 ): void {
   if (total !== undefined) {
     db.prepare(`
@@ -398,7 +408,8 @@ export function updateAnalysisJobProgress(
       SET completed_files = ?, failed_files = ?, total_files = ?
       WHERE id = ?
     `).run(completed, failed, total, id)
-  } else {
+  }
+  else {
     db.prepare(`
       UPDATE analysis_jobs
       SET completed_files = ?, failed_files = ?
@@ -460,11 +471,11 @@ export function upsertDownloadFile(file: {
 export function updateDownloadFileStatus(id: number, status: DownloadFileStatus, errorMessage?: string): void {
   if (errorMessage) {
     db.prepare('UPDATE download_files SET status = ?, error_message = ? WHERE id = ?').run(status, errorMessage, id)
-  } else {
+  }
+  else {
     db.prepare('UPDATE download_files SET status = ? WHERE id = ?').run(status, id)
   }
 }
-
 
 export function updateDownloadFileAnalysis(id: number, data: {
   bpm?: number
@@ -486,8 +497,8 @@ export function updateDownloadFileAnalysis(id: number, data: {
 
   if (updates.length === 0) return
 
-  updates.push("analyzed_at = datetime('now')")
-  updates.push("status = 'completed'")
+  updates.push('analyzed_at = datetime(\'now\')')
+  updates.push('status = \'completed\'')
   values.push(id)
 
   db.prepare(`UPDATE download_files SET ${updates.join(', ')} WHERE id = ?`).run(...values)

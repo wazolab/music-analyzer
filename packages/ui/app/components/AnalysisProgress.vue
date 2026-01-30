@@ -1,56 +1,83 @@
 <template>
-  <div class="progress-overlay" @click.self="handleClose">
+  <div
+    class="progress-overlay"
+    @click.self="handleClose"
+  >
     <div class="progress-modal">
       <h2>
         {{ statusTitle }}
       </h2>
 
       <div class="progress-bar">
-        <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
+        <div
+          class="progress-fill"
+          :style="{ width: progressPercent + '%' }"
+        />
       </div>
 
       <div class="progress-stats">
         <span>{{ job?.completed_files || 0 }} / {{ job?.total_files || 0 }} files</span>
-        <span v-if="job?.failed_files > 0" class="failed">
+        <span
+          v-if="job?.failed_files > 0"
+          class="failed"
+        >
           {{ job.failed_files }} failed
         </span>
       </div>
 
-      <div v-if="job?.current_file && job?.status === 'running'" class="current-file">
+      <div
+        v-if="job?.current_file && job?.status === 'running'"
+        class="current-file"
+      >
         Analyzing: {{ job.current_file }}
       </div>
 
       <!-- Logs section -->
-      <div v-if="job?.logs" class="logs-section">
-        <button @click="showLogs = !showLogs" class="logs-toggle">
+      <div
+        v-if="job?.logs"
+        class="logs-section"
+      >
+        <button
+          class="logs-toggle"
+          @click="showLogs = !showLogs"
+        >
           {{ showLogs ? 'Hide' : 'Show' }} logs
         </button>
-        <div v-if="showLogs" class="logs-content">
+        <div
+          v-if="showLogs"
+          class="logs-content"
+        >
           <pre>{{ job.logs }}</pre>
         </div>
       </div>
 
-      <div v-if="job?.status === 'completed'" class="success-message">
+      <div
+        v-if="job?.status === 'completed'"
+        class="success-message"
+      >
         Analysis complete! Files organized to {{ job.output_dir }}
       </div>
 
-      <div v-if="job?.status === 'failed'" class="error-message">
+      <div
+        v-if="job?.status === 'failed'"
+        class="error-message"
+      >
         Analysis failed. Check logs above for details.
       </div>
 
       <div class="actions">
         <button
           v-if="job?.status === 'running'"
-          @click="cancelJob"
           class="cancel-btn"
           :disabled="cancelling"
+          @click="cancelJob"
         >
           {{ cancelling ? 'Cancelling...' : 'Cancel' }}
         </button>
         <button
           v-if="job?.status === 'completed' || job?.status === 'failed' || job?.status === 'cancelled'"
-          @click="$emit('close')"
           class="done-btn"
+          @click="$emit('close')"
         >
           Done
         </button>
@@ -63,8 +90,8 @@
 const props = defineProps({
   jobId: {
     type: Number,
-    required: true
-  }
+    required: true,
+  },
 })
 
 const emit = defineEmits(['close'])
@@ -75,7 +102,7 @@ const showLogs = ref(true)
 // Fetch job status
 const { data: job, refresh } = await useFetch(
   () => `/api/analyze/${props.jobId}/status`,
-  { default: () => null }
+  { default: () => null },
 )
 
 // Poll for updates every second while running
@@ -121,7 +148,8 @@ async function cancelJob() {
   try {
     await $fetch(`/api/analyze/${props.jobId}/cancel`, { method: 'POST' })
     await refresh()
-  } catch (e) {
+  }
+  catch (e) {
     console.error('Failed to cancel job:', e)
   }
   cancelling.value = false

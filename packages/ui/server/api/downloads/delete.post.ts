@@ -8,11 +8,11 @@ export default defineEventHandler(async (event) => {
   if (!fileIds || !Array.isArray(fileIds) || fileIds.length === 0) {
     throw createError({
       statusCode: 400,
-      message: 'fileIds array is required'
+      message: 'fileIds array is required',
     })
   }
 
-  const results: { id: number; success: boolean; error?: string }[] = []
+  const results: { id: number, success: boolean, error?: string }[] = []
 
   for (const id of fileIds) {
     const file = getDownloadFileById(id)
@@ -27,12 +27,14 @@ export default defineEventHandler(async (event) => {
       // Remove from database
       deleteDownloadFile(id)
       results.push({ id, success: true })
-    } catch (error: any) {
+    }
+    catch (error: any) {
       // If file doesn't exist on disk, still remove from database
       if (error.code === 'ENOENT') {
         deleteDownloadFile(id)
         results.push({ id, success: true })
-      } else {
+      }
+      else {
         results.push({ id, success: false, error: error.message })
       }
     }
@@ -44,6 +46,6 @@ export default defineEventHandler(async (event) => {
   return {
     deleted,
     failed,
-    results
+    results,
   }
 })

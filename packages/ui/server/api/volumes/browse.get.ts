@@ -36,16 +36,18 @@ export default defineEventHandler(async (event): Promise<FolderEntry[]> => {
         await stat(fullPath)
         folders.push({
           name: entry.name,
-          path: fullPath
+          path: fullPath,
         })
-      } catch {
+      }
+      catch {
         // Can't access, skip
       }
     }
 
     // Sort alphabetically
     return folders.sort((a, b) => a.name.localeCompare(b.name))
-  } catch (error) {
+  }
+  catch (error) {
     console.error('Failed to browse folder:', error)
     throw createError({ statusCode: 500, message: 'Failed to browse folder' })
   }

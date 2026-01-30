@@ -7,7 +7,7 @@ export default defineEventHandler(async (event) => {
   if (isNaN(id)) {
     throw createError({
       statusCode: 400,
-      message: 'Invalid playlist ID'
+      message: 'Invalid playlist ID',
     })
   }
 
@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
   if (!playlist) {
     throw createError({
       statusCode: 404,
-      message: 'Playlist not found'
+      message: 'Playlist not found',
     })
   }
 
@@ -31,7 +31,7 @@ export default defineEventHandler(async (event) => {
 
   const result: PlaylistWithTracks = {
     ...updatedPlaylist,
-    tracks
+    tracks,
   }
 
   return result
@@ -46,10 +46,10 @@ async function fetchTracksFromUrl(url: string): Promise<TrackInput[]> {
     '--skip-download',
     '--no-playlist-reverse',
     '--no-cookies-from-browser',
-    url
+    url,
   ]
 
-  const result = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+  const result = await new Promise<{ stdout: string, stderr: string }>((resolve, reject) => {
     const proc = spawn('yt-dlp', args, { maxBuffer: 50 * 1024 * 1024 } as any)
     let stdout = ''
     let stderr = ''
@@ -80,7 +80,8 @@ async function fetchTracksFromUrl(url: string): Promise<TrackInput[]> {
       if (track) {
         tracks.push(track)
       }
-    } catch {
+    }
+    catch {
       // Skip malformed lines
     }
   }
@@ -88,7 +89,7 @@ async function fetchTracksFromUrl(url: string): Promise<TrackInput[]> {
   if (tracks.length === 0 && result.stderr) {
     throw createError({
       statusCode: 500,
-      message: result.stderr.split('\n')[0] || 'No tracks found'
+      message: result.stderr.split('\n')[0] || 'No tracks found',
     })
   }
 

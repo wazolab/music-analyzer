@@ -6,7 +6,7 @@ export default defineEventHandler(async (event) => {
   if (isNaN(id)) {
     throw createError({
       statusCode: 400,
-      message: 'Invalid job ID'
+      message: 'Invalid job ID',
     })
   }
 
@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
   if (!job) {
     throw createError({
       statusCode: 404,
-      message: 'Job not found'
+      message: 'Job not found',
     })
   }
 
@@ -24,6 +24,6 @@ export default defineEventHandler(async (event) => {
 
   return {
     ...job,
-    files
+    files,
   }
 })

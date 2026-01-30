@@ -7,21 +7,21 @@ export default defineEventHandler(async (event) => {
   if (!body.name?.trim()) {
     throw createError({
       statusCode: 400,
-      message: 'Playlist name is required'
+      message: 'Playlist name is required',
     })
   }
 
   if (!body.url?.trim()) {
     throw createError({
       statusCode: 400,
-      message: 'Playlist URL is required'
+      message: 'Playlist URL is required',
     })
   }
 
   if (!Array.isArray(body.tracks) || body.tracks.length === 0) {
     throw createError({
       statusCode: 400,
-      message: 'Tracks array is required and must not be empty'
+      message: 'Tracks array is required and must not be empty',
     })
   }
 
@@ -30,7 +30,7 @@ export default defineEventHandler(async (event) => {
   if (existing) {
     throw createError({
       statusCode: 409,
-      message: 'A playlist with this URL already exists'
+      message: 'A playlist with this URL already exists',
     })
   }
 

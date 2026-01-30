@@ -1,19 +1,20 @@
 """Metadata lookup via AcoustID fingerprinting and MusicBrainz."""
 
+import json
 import os
 import re
 import subprocess
-from dataclasses import dataclass
-from typing import Optional, List, Tuple
-import json
-import urllib.request
-import urllib.parse
 import time
+import urllib.parse
+import urllib.request
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
 
 
 @dataclass
 class MetadataResult:
     """Metadata from MusicBrainz lookup."""
+
     title: Optional[str] = None
     artist: Optional[str] = None
     album: Optional[str] = None
@@ -30,12 +31,12 @@ def normalize_text(text: str) -> str:
     # Lowercase
     text = text.lower()
     # Remove common suffixes like (remix), (feat. X), etc.
-    text = re.sub(r'\s*\([^)]*\)', '', text)
-    text = re.sub(r'\s*\[[^\]]*\]', '', text)
+    text = re.sub(r"\s*\([^)]*\)", "", text)
+    text = re.sub(r"\s*\[[^\]]*\]", "", text)
     # Remove punctuation
-    text = re.sub(r'[^\w\s]', ' ', text)
+    text = re.sub(r"[^\w\s]", " ", text)
     # Collapse whitespace
-    text = re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r"\s+", " ", text).strip()
     return text
 
 
@@ -86,10 +87,7 @@ class MetadataLookup:
         self.discogs_token = discogs_token or os.environ.get("DISCOGS_TOKEN")
 
     def lookup(
-        self,
-        file_path: str,
-        hint_artist: Optional[str] = None,
-        hint_title: Optional[str] = None
+        self, file_path: str, hint_artist: Optional[str] = None, hint_title: Optional[str] = None
     ) -> MetadataResult:
         """
         Look up metadata for an audio file.
@@ -115,7 +113,9 @@ class MetadataLookup:
         if fingerprint:
             recordings, confidence = self._query_acoustid(fingerprint, duration)
             if recordings:
-                recording_id = self._find_best_recording(recordings, duration, hint_artist, hint_title)
+                recording_id = self._find_best_recording(
+                    recordings, duration, hint_artist, hint_title
+                )
                 if recording_id:
                     result = self._query_musicbrainz(recording_id)
                     if result.title:  # Got valid metadata
@@ -144,7 +144,7 @@ class MetadataLookup:
         recordings: List[dict],
         file_duration: int,
         hint_artist: Optional[str],
-        hint_title: Optional[str]
+        hint_title: Optional[str],
     ) -> Optional[str]:
         """
         Find the recording that best matches using:
@@ -202,10 +202,7 @@ class MetadataLookup:
         """Generate audio fingerprint using fpcalc (Chromaprint)."""
         try:
             result = subprocess.run(
-                ["fpcalc", "-json", file_path],
-                capture_output=True,
-                text=True,
-                timeout=60
+                ["fpcalc", "-json", file_path], capture_output=True, text=True, timeout=60
             )
             if result.returncode != 0:
                 print(f"fpcalc error: {result.stderr}")
@@ -231,7 +228,7 @@ class MetadataLookup:
             "fingerprint": fingerprint,
             "duration": str(duration),
             # Request recordings with full metadata for better matching
-            "meta": "recordings"
+            "meta": "recordings",
         }
 
         url = f"{self.ACOUSTID_URL}?{urllib.parse.urlencode(params)}"
@@ -286,8 +283,7 @@ class MetadataLookup:
         # Include releases to get album and year
         # Note: labels requires a separate release query
         url = (
-            f"{self.MUSICBRAINZ_URL}/recording/{recording_id}"
-            f"?inc=artist-credits+releases&fmt=json"
+            f"{self.MUSICBRAINZ_URL}/recording/{recording_id}?inc=artist-credits+releases&fmt=json"
         )
 
         try:
@@ -317,10 +313,7 @@ class MetadataLookup:
             releases = data.get("releases", [])
             if releases:
                 # Sort by date to get earliest release
-                releases_with_date = [
-                    r for r in releases
-                    if r.get("date")
-                ]
+                releases_with_date = [r for r in releases if r.get("date")]
                 releases_with_date.sort(key=lambda r: r.get("date", "9999"))
 
                 # Prefer release with label
@@ -352,13 +345,7 @@ class MetadataLookup:
                     if release_id:
                         label = self._get_release_label(release_id)
 
-            return MetadataResult(
-                title=title,
-                artist=artist,
-                album=album,
-                label=label,
-                year=year
-            )
+            return MetadataResult(title=title, artist=artist, album=album, label=label, year=year)
 
         except Exception as e:
             print(f"MusicBrainz query error: {e}")
@@ -375,21 +362,20 @@ class MetadataLookup:
 
         # Search for the track
         query = f"{artist} {title}"
-        params = {
-            "q": query,
-            "type": "release",
-            "per_page": "10"
-        }
+        params = {"q": query, "type": "release", "per_page": "10"}
 
         url = f"{self.DISCOGS_URL}/database/search?{urllib.parse.urlencode(params)}"
 
         try:
             # Discogs rate limit: 60 requests per minute
             time.sleep(1)
-            req = urllib.request.Request(url, headers={
-                "User-Agent": self.USER_AGENT,
-                "Authorization": f"Discogs token={self.discogs_token}"
-            })
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "User-Agent": self.USER_AGENT,
+                    "Authorization": f"Discogs token={self.discogs_token}",
+                },
+            )
             with urllib.request.urlopen(req, timeout=10) as response:
                 data = json.loads(response.read().decode())
 
@@ -456,10 +442,13 @@ class MetadataLookup:
             if resource_url:
                 try:
                     time.sleep(1)  # Rate limit
-                    req = urllib.request.Request(resource_url, headers={
-                        "User-Agent": self.USER_AGENT,
-                        "Authorization": f"Discogs token={self.discogs_token}"
-                    })
+                    req = urllib.request.Request(
+                        resource_url,
+                        headers={
+                            "User-Agent": self.USER_AGENT,
+                            "Authorization": f"Discogs token={self.discogs_token}",
+                        },
+                    )
                     with urllib.request.urlopen(req, timeout=10) as response:
                         release_data = json.loads(response.read().decode())
 
@@ -487,7 +476,7 @@ class MetadataLookup:
                 album=album,
                 label=label,
                 year=year,
-                confidence=best_score
+                confidence=best_score,
             )
 
         except Exception as e:
@@ -502,13 +491,15 @@ class MetadataLookup:
         """
         # Clean up artist and title for better search
         # Remove years like (2025), [2025]
-        clean_title = re.sub(r'\s*[\(\[]?\d{4}[\)\]]?\s*$', '', title).strip()
+        clean_title = re.sub(r"\s*[\(\[]?\d{4}[\)\]]?\s*$", "", title).strip()
         # Split multiple artists and get the first/main one
         # Handle separators: ", ", " & ", " x ", " feat. ", " ft. "
-        main_artist = re.split(r'\s*[,&x]\s*|\s+feat\.?\s+|\s+ft\.?\s+', artist, flags=re.IGNORECASE)[0].strip()
+        main_artist = re.split(
+            r"\s*[,&x]\s*|\s+feat\.?\s+|\s+ft\.?\s+", artist, flags=re.IGNORECASE
+        )[0].strip()
         # Normalize remaining artist separators
         clean_artist = artist.replace(",", " ").replace("&", " ")
-        clean_artist = re.sub(r'\s+', ' ', clean_artist).strip()
+        clean_artist = re.sub(r"\s+", " ", clean_artist).strip()
 
         # Try multiple search queries in order of specificity
         search_queries = [
@@ -521,7 +512,7 @@ class MetadataLookup:
         for query in search_queries:
             params = {
                 "q": query,
-                "item_type": "a"  # Search for albums
+                "item_type": "a",  # Search for albums
             }
 
             url = f"{self.BANDCAMP_SEARCH_URL}?{urllib.parse.urlencode(params)}"
@@ -556,18 +547,22 @@ class MetadataLookup:
                     for track_url in track_matches[:3]:
                         try:
                             time.sleep(0.3)
-                            req = urllib.request.Request(track_url, headers={"User-Agent": self.USER_AGENT})
+                            req = urllib.request.Request(
+                                track_url, headers={"User-Agent": self.USER_AGENT}
+                            )
                             with urllib.request.urlopen(req, timeout=10) as response:
                                 track_html = response.read().decode()
 
                             # Extract base URL from track URL (e.g., https://wajang.bandcamp.com)
-                            base_url_match = re.match(r'(https://[^/]+)', track_url)
+                            base_url_match = re.match(r"(https://[^/]+)", track_url)
                             if not base_url_match:
                                 continue
                             base_url = base_url_match.group(1)
 
                             # First try to find album URL in JSON-LD data
-                            json_album_match = re.search(r'"album_url"\s*:\s*"(/album/[^"]+)"', track_html)
+                            json_album_match = re.search(
+                                r'"album_url"\s*:\s*"(/album/[^"]+)"', track_html
+                            )
                             if json_album_match:
                                 album_url = base_url + json_album_match.group(1)
                                 album_matches.append(album_url)
@@ -607,11 +602,15 @@ class MetadataLookup:
 
                     # Extract metadata from album page
                     # Artist name
-                    artist_match = re.search(r'<span[^>]*>by\s*</span>\s*<a[^>]*>([^<]+)</a>', album_html)
+                    artist_match = re.search(
+                        r"<span[^>]*>by\s*</span>\s*<a[^>]*>([^<]+)</a>", album_html
+                    )
                     found_artist = artist_match.group(1).strip() if artist_match else None
 
                     # Album title
-                    album_match = re.search(r'<h2[^>]*class="trackTitle"[^>]*>([^<]+)</h2>', album_html)
+                    album_match = re.search(
+                        r'<h2[^>]*class="trackTitle"[^>]*>([^<]+)</h2>', album_html
+                    )
                     if not album_match:
                         album_match = re.search(r'"name"\s*:\s*"([^"]+)"', album_html)
                     found_album = album_match.group(1).strip() if album_match else None
@@ -639,7 +638,9 @@ class MetadataLookup:
                     score = (artist_score * 0.4) + (title_score * 0.6)
 
                     # Release date
-                    date_match = re.search(r'release[sd]?\s+(\w+\s+\d{1,2},?\s+)?(\d{4})', album_html, re.IGNORECASE)
+                    date_match = re.search(
+                        r"release[sd]?\s+(\w+\s+\d{1,2},?\s+)?(\d{4})", album_html, re.IGNORECASE
+                    )
                     year = None
                     if date_match:
                         try:
@@ -648,7 +649,10 @@ class MetadataLookup:
                             pass
 
                     # Label - Bandcamp shows label in "credits" section
-                    label_match = re.search(r'<a[^>]*href="https://([^"]+)\.bandcamp\.com"[^>]*>([^<]+)</a>\s*</p>', album_html)
+                    label_match = re.search(
+                        r'<a[^>]*href="https://([^"]+)\.bandcamp\.com"[^>]*>([^<]+)</a>\s*</p>',
+                        album_html,
+                    )
                     label = None
                     if label_match:
                         potential_label = label_match.group(2).strip()
@@ -663,7 +667,7 @@ class MetadataLookup:
                             label = label_meta.group(1)
 
                     # Extract label from subdomain if it differs from artist
-                    subdomain_match = re.search(r'https://([^.]+)\.bandcamp\.com', album_url)
+                    subdomain_match = re.search(r"https://([^.]+)\.bandcamp\.com", album_url)
                     if subdomain_match and not label:
                         subdomain = subdomain_match.group(1)
                         # If subdomain differs significantly from artist, it might be a label
@@ -693,7 +697,7 @@ class MetadataLookup:
                 album=best_result["album"],
                 label=best_result["label"],
                 year=best_result["year"],
-                confidence=best_score
+                confidence=best_score,
             )
 
         except Exception as e:
@@ -706,7 +710,7 @@ def lookup_metadata(
     hint_artist: Optional[str] = None,
     hint_title: Optional[str] = None,
     api_key: Optional[str] = None,
-    discogs_token: Optional[str] = None
+    discogs_token: Optional[str] = None,
 ) -> MetadataResult:
     """
     Convenience function to look up metadata for a file.

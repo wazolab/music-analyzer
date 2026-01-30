@@ -1,29 +1,32 @@
 <template>
-  <div class="track-row" :class="{ 'in-prep': inPrep }">
+  <div
+    class="track-row"
+    :class="{ 'in-prep': inPrep }"
+  >
     <span class="track-number">{{ index }}.</span>
     <div class="track-actions">
       <button
         v-if="track.source_url"
         class="action-btn play-btn"
         :class="{ playing: isPlaying }"
-        @click="togglePlay"
         :title="isPlaying ? 'Stop' : 'Play'"
+        @click="togglePlay"
       >
         {{ isPlaying ? '⏹' : '▶' }}
       </button>
       <button
         class="action-btn copy-btn"
         :class="{ copied }"
-        @click="copySearchText"
         title="Copy for Soulseek search"
+        @click="copySearchText"
       >
         {{ copied ? '✓' : '⎘' }}
       </button>
       <button
         class="action-btn prep-btn"
         :class="{ active: inPrep }"
-        @click="togglePrep"
         :title="inPrep ? 'Remove from Prep' : 'Add to Prep'"
+        @click="togglePrep"
       >
         {{ inPrep ? '✓' : '+' }}
       </button>
@@ -31,10 +34,22 @@
     <span class="track-artist">{{ track.artist }}</span>
     <span class="track-separator">-</span>
     <span class="track-title">{{ track.title }}</span>
-    <span v-if="topGenre" class="track-genre">{{ topGenre }}</span>
-    <span v-if="track.bpm" class="track-bpm">{{ Math.round(track.bpm) }} BPM</span>
-    <span v-if="track.key_notation" class="track-key">{{ track.key_notation }}</span>
-    <span v-if="track.duration" class="track-duration">{{ formatDuration(track.duration) }}</span>
+    <span
+      v-if="topGenre"
+      class="track-genre"
+    >{{ topGenre }}</span>
+    <span
+      v-if="track.bpm"
+      class="track-bpm"
+    >{{ Math.round(track.bpm) }} BPM</span>
+    <span
+      v-if="track.key_notation"
+      class="track-key"
+    >{{ track.key_notation }}</span>
+    <span
+      v-if="track.duration"
+      class="track-duration"
+    >{{ formatDuration(track.duration) }}</span>
   </div>
 </template>
 
@@ -42,20 +57,20 @@
 const props = defineProps({
   track: {
     type: Object,
-    required: true
+    required: true,
   },
   index: {
     type: Number,
-    required: true
+    required: true,
   },
   inPrep: {
     type: Boolean,
-    default: false
+    default: false,
   },
   isPlaying: {
     type: Boolean,
-    default: false
-  }
+    default: false,
+  },
 })
 
 const emit = defineEmits(['toggle-prep', 'toggle-play'])
@@ -70,7 +85,8 @@ const topGenre = computed(() => {
   if (typeof tags === 'string') {
     try {
       tags = JSON.parse(tags)
-    } catch {
+    }
+    catch {
       return null
     }
   }

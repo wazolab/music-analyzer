@@ -7,7 +7,7 @@ export default defineEventHandler(async (event) => {
   if (!trackId) {
     throw createError({
       statusCode: 400,
-      message: 'Track ID is required'
+      message: 'Track ID is required',
     })
   }
 
@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
   if (!track) {
     throw createError({
       statusCode: 404,
-      message: 'Track not found'
+      message: 'Track not found',
     })
   }
 

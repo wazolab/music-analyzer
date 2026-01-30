@@ -2,40 +2,58 @@
   <div class="analysis-page">
     <header class="page-header">
       <h1>Analysis</h1>
-      <button @click="refreshFiles" :disabled="refreshing" class="refresh-btn">
+      <button
+        :disabled="refreshing"
+        class="refresh-btn"
+        @click="refreshFiles"
+      >
         {{ refreshing ? 'Scanning...' : 'Refresh' }}
       </button>
     </header>
 
-    <div v-if="pending" class="loading">Scanning downloads folder...</div>
+    <div
+      v-if="pending"
+      class="loading"
+    >
+      Scanning downloads folder...
+    </div>
     <template v-else>
       <!-- Section 1: Pending Analysis -->
       <section class="section pending-section">
-        <h2 class="section-title">To Analyze ({{ pendingFiles.length }})</h2>
+        <h2 class="section-title">
+          To Analyze ({{ pendingFiles.length }})
+        </h2>
 
-        <div v-if="pendingFiles.length === 0" class="empty-section">
+        <div
+          v-if="pendingFiles.length === 0"
+          class="empty-section"
+        >
           <p>No files waiting for analysis</p>
         </div>
         <template v-else>
           <div class="selection-bar">
             <label class="select-all">
-              <input type="checkbox" v-model="selectAll" @change="toggleSelectAll">
+              <input
+                v-model="selectAll"
+                type="checkbox"
+                @change="toggleSelectAll"
+              >
               Select all ({{ selectedFiles.size }}/{{ pendingFiles.length }})
             </label>
             <div class="selection-actions">
               <button
                 v-if="selectedFiles.size > 0"
-                @click="deleteSelected"
                 :disabled="deleting"
                 class="delete-btn"
+                @click="deleteSelected"
               >
                 {{ deleting ? 'Deleting...' : `Delete ${selectedFiles.size}` }}
               </button>
               <button
                 v-if="selectedFiles.size > 0"
-                @click="startAnalysis"
                 :disabled="analyzing"
                 class="analyze-btn"
+                @click="startAnalysis"
               >
                 {{ analyzing ? 'Analyzing...' : `Analyze ${selectedFiles.size}` }}
               </button>
@@ -57,40 +75,71 @@
       <!-- Section 2: Analyzed by Genre -->
       <section class="section analyzed-section">
         <div class="section-header">
-          <h2 class="section-title">Analyzed ({{ analyzedFiles.length }})</h2>
+          <h2 class="section-title">
+            Analyzed ({{ analyzedFiles.length }})
+          </h2>
           <button
             v-if="analyzedFiles.length > 0"
-            @click="clearAnalyzed"
             :disabled="deleting"
             class="clear-btn"
+            @click="clearAnalyzed"
           >
             {{ deleting ? 'Clearing...' : 'Clear all' }}
           </button>
         </div>
 
-        <div v-if="analyzedFiles.length === 0" class="empty-section">
+        <div
+          v-if="analyzedFiles.length === 0"
+          class="empty-section"
+        >
           <p>No analyzed files yet</p>
         </div>
-        <div v-else class="genre-grid">
-          <div v-for="group in filesByGenre" :key="group.genre" class="genre-card">
+        <div
+          v-else
+          class="genre-grid"
+        >
+          <div
+            v-for="group in filesByGenre"
+            :key="group.genre"
+            class="genre-card"
+          >
             <div class="genre-header">
               <span class="genre-name">{{ group.genre }}</span>
               <span class="genre-count">{{ group.files.length }}</span>
             </div>
             <div class="genre-files">
-              <div v-for="file in group.files" :key="file.id" class="genre-file">
+              <div
+                v-for="file in group.files"
+                :key="file.id"
+                class="genre-file"
+              >
                 <div class="file-info">
-                  <span class="file-track" v-if="file.artist && file.title">
+                  <span
+                    v-if="file.artist && file.title"
+                    class="file-track"
+                  >
                     <span class="track-artist">{{ file.artist }}</span>
                     <span class="track-separator"> - </span>
                     <span class="track-title">{{ file.title }}</span>
                   </span>
-                  <span class="file-name" v-else>{{ file.filename }}</span>
+                  <span
+                    v-else
+                    class="file-name"
+                  >{{ file.filename }}</span>
                 </div>
                 <div class="file-analysis">
-                  <span v-if="file.bpm" class="analysis-badge bpm">{{ Math.round(file.bpm) }} BPM</span>
-                  <span v-if="file.key_notation" class="analysis-badge key">{{ file.key_notation }}</span>
-                  <span v-if="file.energy" class="analysis-badge energy">E{{ file.energy }}</span>
+                  <span
+                    v-if="file.bpm"
+                    class="analysis-badge bpm"
+                  >{{ Math.round(file.bpm) }} BPM</span>
+                  <span
+                    v-if="file.key_notation"
+                    class="analysis-badge key"
+                  >{{ file.key_notation }}</span>
+                  <span
+                    v-if="file.energy"
+                    class="analysis-badge energy"
+                  >E{{ file.energy }}</span>
                 </div>
               </div>
             </div>
@@ -120,18 +169,18 @@ const refreshing = ref(false)
 
 // Fetch downloads
 const { data: downloadsData, pending, refresh } = await useFetch('/api/downloads', {
-  default: () => ({ files: [], downloadsDir: '' })
+  default: () => ({ files: [], downloadsDir: '' }),
 })
 
 const files = computed(() => downloadsData.value?.files || [])
 
 // Split files into pending and analyzed
 const pendingFiles = computed(() =>
-  files.value.filter(f => f.status !== 'completed')
+  files.value.filter(f => f.status !== 'completed'),
 )
 
 const analyzedFiles = computed(() =>
-  files.value.filter(f => f.status === 'completed')
+  files.value.filter(f => f.status === 'completed'),
 )
 
 // Group analyzed files by genre
@@ -153,7 +202,8 @@ const filesByGenre = computed(() => {
             genre = genre.split('---')[1]
           }
         }
-      } catch {
+      }
+      catch {
         // Keep default
       }
     }
@@ -172,7 +222,8 @@ const filesByGenre = computed(() => {
 function toggleSelect(fileId) {
   if (selectedFiles.value.has(fileId)) {
     selectedFiles.value.delete(fileId)
-  } else {
+  }
+  else {
     selectedFiles.value.add(fileId)
   }
   selectedFiles.value = new Set(selectedFiles.value) // Trigger reactivity
@@ -182,7 +233,8 @@ function toggleSelect(fileId) {
 function toggleSelectAll() {
   if (selectAll.value) {
     selectedFiles.value = new Set(pendingFiles.value.map(f => f.id))
-  } else {
+  }
+  else {
     selectedFiles.value = new Set()
   }
 }
@@ -207,14 +259,15 @@ async function startAnalysis() {
     const response = await $fetch('/api/analyze/start', {
       method: 'POST',
       body: {
-        fileIds: Array.from(selectedFiles.value)
-      }
+        fileIds: Array.from(selectedFiles.value),
+      },
     })
 
     currentJob.value = response.job
     selectedFiles.value = new Set()
     selectAll.value = false
-  } catch (e) {
+  }
+  catch (e) {
     console.error('Failed to start analysis:', e)
     alert(e.data?.message || 'Failed to start analysis')
   }
@@ -234,7 +287,7 @@ async function deleteSelected() {
   try {
     const result = await $fetch('/api/downloads/delete', {
       method: 'POST',
-      body: { fileIds: Array.from(selectedFiles.value) }
+      body: { fileIds: Array.from(selectedFiles.value) },
     })
 
     selectedFiles.value = new Set()
@@ -244,7 +297,8 @@ async function deleteSelected() {
     if (result.failed > 0) {
       alert(`Deleted ${result.deleted} files. ${result.failed} failed.`)
     }
-  } catch (e) {
+  }
+  catch (e) {
     console.error('Failed to delete files:', e)
     alert(e.data?.message || 'Failed to delete files')
   }
@@ -265,7 +319,7 @@ async function clearAnalyzed() {
   try {
     const result = await $fetch('/api/downloads/delete', {
       method: 'POST',
-      body: { fileIds: analyzedFiles.map(f => f.id) }
+      body: { fileIds: analyzedFiles.map(f => f.id) },
     })
 
     await refresh()
@@ -273,7 +327,8 @@ async function clearAnalyzed() {
     if (result.failed > 0) {
       alert(`Deleted ${result.deleted} files. ${result.failed} failed.`)
     }
-  } catch (e) {
+  }
+  catch (e) {
     console.error('Failed to clear analyzed files:', e)
     alert(e.data?.message || 'Failed to clear files')
   }

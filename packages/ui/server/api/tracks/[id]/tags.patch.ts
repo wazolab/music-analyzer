@@ -6,7 +6,7 @@ export default defineEventHandler(async (event) => {
   if (!id || isNaN(id)) {
     throw createError({
       statusCode: 400,
-      message: 'Invalid track ID'
+      message: 'Invalid track ID',
     })
   }
 
@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
   if (!track) {
     throw createError({
       statusCode: 404,
-      message: 'Track not found'
+      message: 'Track not found',
     })
   }
 
@@ -24,7 +24,7 @@ export default defineEventHandler(async (event) => {
   if (!Array.isArray(tags)) {
     throw createError({
       statusCode: 400,
-      message: 'Tags must be an array'
+      message: 'Tags must be an array',
     })
   }
 

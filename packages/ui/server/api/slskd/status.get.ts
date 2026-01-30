@@ -11,7 +11,8 @@ export default defineEventHandler(async () => {
       return { status: 'running' }
     }
     return { status: 'stopped' }
-  } catch {
+  }
+  catch {
     return { status: 'stopped' }
   }
 })

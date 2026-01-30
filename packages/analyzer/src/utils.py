@@ -3,12 +3,12 @@
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
 
 
 @dataclass
 class TrackInfo:
     """Parsed track information from filename."""
+
     artist: str
     title: str
     filename: str
@@ -76,9 +76,13 @@ def find_audio_files(directory: Path, recursive: bool = True) -> list[Path]:
     # Include all formats: FLAC (native) + convertible formats
     extensions = [
         "*.flac",  # Native format
-        "*.mp3", "*.m4a", "*.aac",  # Lossy compressed
-        "*.wav", "*.aiff",  # Lossless uncompressed
-        "*.ogg", "*.opus",  # Lossy (Vorbis/Opus)
+        "*.mp3",
+        "*.m4a",
+        "*.aac",  # Lossy compressed
+        "*.wav",
+        "*.aiff",  # Lossless uncompressed
+        "*.ogg",
+        "*.opus",  # Lossy (Vorbis/Opus)
         "*.wma",  # Windows Media
     ]
     pattern = "**/*" if recursive else "*"

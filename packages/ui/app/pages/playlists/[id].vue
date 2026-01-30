@@ -1,27 +1,56 @@
 <template>
-  <div class="playlist-detail" :class="{ 'has-player': currentTrack }">
+  <div
+    class="playlist-detail"
+    :class="{ 'has-player': currentTrack }"
+  >
     <div class="playlist-content">
-      <div v-if="pending" class="loading">Loading playlist...</div>
-      <div v-else-if="fetchError" class="error">{{ fetchError.data?.message || 'Failed to load playlist' }}</div>
+      <div
+        v-if="pending"
+        class="loading"
+      >
+        Loading playlist...
+      </div>
+      <div
+        v-else-if="fetchError"
+        class="error"
+      >
+        {{ fetchError.data?.message || 'Failed to load playlist' }}
+      </div>
       <template v-else-if="playlist">
         <div class="playlist-header">
           <div class="playlist-info">
-            <NuxtLink to="/" class="back-link">&larr; Back to playlists</NuxtLink>
+            <NuxtLink
+              to="/"
+              class="back-link"
+            >&larr; Back to playlists</NuxtLink>
             <h2>{{ playlist.name }}</h2>
             <div class="meta">
               <span>{{ playlist.track_count }} tracks</span>
               <span class="separator">|</span>
-              <a :href="playlist.url" target="_blank" class="source-link">View source</a>
+              <a
+                :href="playlist.url"
+                target="_blank"
+                class="source-link"
+              >View source</a>
               <span class="separator">|</span>
               <ClientOnly><span>Updated {{ formatDate(playlist.updated_at) }}</span></ClientOnly>
             </div>
           </div>
-          <button @click="syncPlaylist" :disabled="syncing" class="sync-btn">
+          <button
+            :disabled="syncing"
+            class="sync-btn"
+            @click="syncPlaylist"
+          >
             {{ syncing ? 'Syncing...' : 'Re-sync' }}
           </button>
         </div>
 
-        <div v-if="error" class="error">{{ error }}</div>
+        <div
+          v-if="error"
+          class="error"
+        >
+          {{ error }}
+        </div>
 
         <div class="tracks-list">
           <TrackRow
@@ -39,14 +68,26 @@
     </div>
 
     <!-- Audio Player (Right Panel) -->
-    <aside v-if="currentTrack" class="player-panel">
+    <aside
+      v-if="currentTrack"
+      class="player-panel"
+    >
       <div class="player-header">
         <span class="player-label">Now Playing</span>
-        <button class="player-close" @click="stopPlayback">✕</button>
+        <button
+          class="player-close"
+          @click="stopPlayback"
+        >
+          ✕
+        </button>
       </div>
       <div class="player-info">
-        <div class="player-artist">{{ currentTrack.artist }}</div>
-        <div class="player-title">{{ currentTrack.title }}</div>
+        <div class="player-artist">
+          {{ currentTrack.artist }}
+        </div>
+        <div class="player-title">
+          {{ currentTrack.title }}
+        </div>
       </div>
       <iframe
         v-if="embedUrl"
@@ -54,7 +95,7 @@
         class="player-embed"
         allow="autoplay"
         frameborder="0"
-      ></iframe>
+      />
     </aside>
   </div>
 </template>
@@ -70,16 +111,16 @@ const prepTrackIds = ref(new Set())
 
 const { data: playlist, pending, error: fetchError, refresh } = await useFetch(
   () => `/api/playlists/${playlistId.value}`,
-  { default: () => null }
+  { default: () => null },
 )
 
 useHead({
-  title: computed(() => playlist.value?.name || 'Playlist')
+  title: computed(() => playlist.value?.name || 'Playlist'),
 })
 
 // Load preparation list
 const { data: prepList } = await useFetch('/api/preparation', {
-  default: () => []
+  default: () => [],
 })
 
 watch(prepList, (list) => {
@@ -118,7 +159,7 @@ function formatDate(dateStr) {
     day: 'numeric',
     year: 'numeric',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
   })
 }
 
@@ -129,7 +170,8 @@ async function syncPlaylist() {
   try {
     await $fetch(`/api/playlists/${playlistId.value}/sync`, { method: 'POST' })
     await refresh()
-  } catch (e) {
+  }
+  catch (e) {
     error.value = e.data?.message || 'Failed to sync playlist'
   }
 
@@ -143,19 +185,21 @@ async function handleTogglePrep(trackId) {
     if (inPrep) {
       await $fetch('/api/preparation/remove', {
         method: 'POST',
-        body: { trackId }
+        body: { trackId },
       })
       prepTrackIds.value.delete(trackId)
-    } else {
+    }
+    else {
       await $fetch('/api/preparation/add', {
         method: 'POST',
-        body: { trackId }
+        body: { trackId },
       })
       prepTrackIds.value.add(trackId)
     }
     // Trigger reactivity
     prepTrackIds.value = new Set(prepTrackIds.value)
-  } catch (e) {
+  }
+  catch (e) {
     error.value = e.data?.message || 'Failed to update preparation list'
   }
 }
@@ -163,7 +207,8 @@ async function handleTogglePrep(trackId) {
 function handleTogglePlay(track) {
   if (currentTrack.value?.id === track.id) {
     currentTrack.value = null
-  } else {
+  }
+  else {
     currentTrack.value = track
   }
 }

@@ -8,8 +8,8 @@ import type { DownloadFile } from '../../utils/types'
 const AUDIO_EXTENSIONS = ['.flac', '.mp3', '.wav', '.aiff', '.m4a', '.ogg']
 
 // Downloads directory - in Docker it's /app/downloads, locally ./downloads
-const DOWNLOADS_DIR = process.env.DOWNLOADS_DIR ||
-  (process.env.NODE_ENV === 'production' ? '/app/downloads' : './downloads')
+const DOWNLOADS_DIR = process.env.DOWNLOADS_DIR
+  || (process.env.NODE_ENV === 'production' ? '/app/downloads' : './downloads')
 
 /**
  * Move a file from a subfolder to the root downloads directory.
@@ -38,7 +38,8 @@ async function flattenFile(filePath: string): Promise<string> {
     await rename(filePath, targetPath)
     console.log(`[Downloads] Flattened: ${filePath} -> ${targetPath}`)
     return targetPath
-  } catch (err) {
+  }
+  catch (err) {
     console.error(`[Downloads] Failed to flatten ${filePath}:`, err)
     return filePath
   }
@@ -62,7 +63,8 @@ async function cleanEmptyDirs(dir: string): Promise<void> {
       console.log(`[Downloads] Removed empty folder: ${dir}`)
       await cleanEmptyDirs(dirname(dir))
     }
-  } catch {
+  }
+  catch {
     // Directory doesn't exist or can't be read
   }
 }
@@ -100,7 +102,8 @@ async function scanAndFlattenDirectory(dir: string): Promise<{
 
         if (entry.isDirectory()) {
           await scanDir(fullPath)
-        } else if (entry.isFile()) {
+        }
+        else if (entry.isFile()) {
           const ext = extname(entry.name).toLowerCase()
           if (AUDIO_EXTENSIONS.includes(ext)) {
             try {
@@ -112,15 +115,17 @@ async function scanAndFlattenDirectory(dir: string): Promise<{
                 path: finalPath,
                 filename: basename(finalPath),
                 folder: null, // Always null after flattening
-                size_bytes: stats.size
+                size_bytes: stats.size,
               })
-            } catch (e) {
+            }
+            catch (e) {
               console.warn(`Could not process file ${fullPath}:`, e)
             }
           }
         }
       }
-    } catch (e) {
+    }
+    catch (e) {
       console.error(`Error scanning directory ${currentDir}:`, e)
     }
   }
@@ -152,6 +157,6 @@ export default defineEventHandler(async (): Promise<{
 
   return {
     files,
-    downloadsDir: DOWNLOADS_DIR
+    downloadsDir: DOWNLOADS_DIR,
   }
 })

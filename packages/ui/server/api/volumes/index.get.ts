@@ -23,8 +23,8 @@ function formatSize(bytes: number): string {
 
 // Get disk space info for a path using df
 async function getDiskInfo(
-  path: string
-): Promise<{ size: string; available: string; fstype: string }> {
+  path: string,
+): Promise<{ size: string, available: string, fstype: string }> {
   try {
     // Use df with specific path to get disk info
     const { stdout } = await execAsync(`df -B1 "${path}" 2>/dev/null | tail -1`)
@@ -35,10 +35,11 @@ async function getDiskInfo(
       return {
         size: formatSize(total),
         available: formatSize(avail),
-        fstype: 'unknown'
+        fstype: 'unknown',
       }
     }
-  } catch {
+  }
+  catch {
     // df failed
   }
   return { size: 'unknown', available: 'unknown', fstype: 'unknown' }
@@ -76,13 +77,15 @@ async function scanMediaDir(basePath: string): Promise<MountedVolume[]> {
               label: subEntry.name,
               fstype: diskInfo.fstype,
               size: diskInfo.size,
-              available: diskInfo.available
+              available: diskInfo.available,
             })
-          } catch {
+          }
+          catch {
             // Can't access, skip
           }
         }
-      } catch {
+      }
+      catch {
         // Can't read user dir, might be a direct mount
         try {
           await stat(userDir)
@@ -93,14 +96,16 @@ async function scanMediaDir(basePath: string): Promise<MountedVolume[]> {
             label: entry.name,
             fstype: diskInfo.fstype,
             size: diskInfo.size,
-            available: diskInfo.available
+            available: diskInfo.available,
           })
-        } catch {
+        }
+        catch {
           // Can't access, skip
         }
       }
     }
-  } catch {
+  }
+  catch {
     // Base path doesn't exist or can't be read
   }
 

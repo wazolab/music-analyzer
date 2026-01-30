@@ -1,10 +1,8 @@
 """Convert audio files to FLAC format for library integrity."""
 
-import os
 import subprocess
 from pathlib import Path
 from typing import Optional, Tuple
-
 
 # Formats that should be converted to FLAC
 CONVERTIBLE_FORMATS = {".mp3", ".m4a", ".aac", ".wav", ".aiff", ".ogg", ".opus", ".wma"}
@@ -17,9 +15,7 @@ def needs_conversion(file_path: str) -> bool:
 
 
 def convert_to_flac(
-    file_path: str,
-    delete_original: bool = True,
-    verbose: bool = True
+    file_path: str, delete_original: bool = True, verbose: bool = True
 ) -> Tuple[str, bool]:
     """
     Convert an audio file to FLAC format.
@@ -80,11 +76,15 @@ def convert_to_flac(
         cmd = [
             "ffmpeg",
             "-y",
-            "-i", str(path),
+            "-i",
+            str(path),
             "-vn",  # No video (but keep cover art via -map)
-            "-c:a", "flac",
-            "-compression_level", "5",
-            "-map_metadata", "0",
+            "-c:a",
+            "flac",
+            "-compression_level",
+            "5",
+            "-map_metadata",
+            "0",
         ]
 
         # For lossless sources, use 24-bit to preserve full quality
@@ -98,7 +98,7 @@ def convert_to_flac(
             cmd,
             capture_output=True,
             text=True,
-            timeout=300  # 5 minute timeout
+            timeout=300,  # 5 minute timeout
         )
 
         if result.returncode != 0:

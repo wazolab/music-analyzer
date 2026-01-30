@@ -1,12 +1,10 @@
 """Musical key detection with Camelot notation."""
 
 from dataclasses import dataclass
-from typing import Tuple
 
 from essentia.standard import KeyExtractor as EssentiaKeyExtractor
 
 from .audio import AudioData
-
 
 # Camelot wheel mapping: (key, scale) -> Camelot notation
 CAMELOT_WHEEL = {
@@ -42,6 +40,7 @@ CAMELOT_WHEEL = {
 @dataclass
 class KeyResult:
     """Result of key analysis."""
+
     key: str  # e.g., "A", "F#"
     scale: str  # "major" or "minor"
     camelot: str  # e.g., "8A", "11B"
@@ -73,12 +72,7 @@ class KeyAnalyzer:
 
         camelot = self._to_camelot(key, scale)
 
-        return KeyResult(
-            key=key,
-            scale=scale,
-            camelot=camelot,
-            confidence=float(confidence)
-        )
+        return KeyResult(key=key, scale=scale, camelot=camelot, confidence=float(confidence))
 
     @staticmethod
     def _to_camelot(key: str, scale: str) -> str:

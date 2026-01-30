@@ -7,7 +7,7 @@ export default defineEventHandler((event) => {
   if (isNaN(id)) {
     throw createError({
       statusCode: 400,
-      message: 'Invalid playlist ID'
+      message: 'Invalid playlist ID',
     })
   }
 
@@ -16,7 +16,7 @@ export default defineEventHandler((event) => {
   if (!playlist) {
     throw createError({
       statusCode: 404,
-      message: 'Playlist not found'
+      message: 'Playlist not found',
     })
   }
 
@@ -24,7 +24,7 @@ export default defineEventHandler((event) => {
 
   const result: PlaylistWithTracks = {
     ...playlist,
-    tracks
+    tracks,
   }
 
   return result

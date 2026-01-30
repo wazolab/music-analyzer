@@ -4,20 +4,33 @@
       <h1>DJ Prep List</h1>
       <button
         v-if="prepList.length > 0"
-        @click="clearList"
         class="clear-btn"
         :disabled="clearing"
+        @click="clearList"
       >
         {{ clearing ? 'Clearing...' : 'Clear All' }}
       </button>
     </header>
 
-    <div v-if="pending" class="loading">Loading preparation list...</div>
-    <div v-else-if="prepList.length === 0" class="empty">
-      <p>No tracks in your prep list yet.</p>
-      <p class="hint">Browse playlists and click the + button to add tracks.</p>
+    <div
+      v-if="pending"
+      class="loading"
+    >
+      Loading preparation list...
     </div>
-    <div v-else class="prep-list">
+    <div
+      v-else-if="prepList.length === 0"
+      class="empty"
+    >
+      <p>No tracks in your prep list yet.</p>
+      <p class="hint">
+        Browse playlists and click the + button to add tracks.
+      </p>
+    </div>
+    <div
+      v-else
+      class="prep-list"
+    >
       <div class="prep-stats">
         {{ prepList.length }} tracks selected for preparation
       </div>
@@ -33,23 +46,23 @@
               v-if="track.source_url"
               class="action-btn play-btn"
               :class="{ playing: currentTrack?.track_id === track.track_id }"
-              @click="togglePlay(track)"
               :title="currentTrack?.track_id === track.track_id ? 'Stop' : 'Play'"
+              @click="togglePlay(track)"
             >
               {{ currentTrack?.track_id === track.track_id ? '⏹' : '▶' }}
             </button>
             <button
               class="action-btn copy-btn"
               :class="{ copied: copiedTrackId === track.track_id }"
-              @click="copySearchText(track)"
               title="Copy for Soulseek search"
+              @click="copySearchText(track)"
             >
               {{ copiedTrackId === track.track_id ? '✓' : '⎘' }}
             </button>
             <button
               class="action-btn remove-btn"
-              @click="removeTrack(track.track_id)"
               title="Remove from Prep"
+              @click="removeTrack(track.track_id)"
             >
               ✕
             </button>
@@ -57,28 +70,45 @@
           <span class="track-artist">{{ track.artist }}</span>
           <span class="track-separator">-</span>
           <span class="track-title">{{ track.title }}</span>
-          <span v-if="track.bpm" class="track-bpm">{{ Math.round(track.bpm) }} BPM</span>
-          <span v-if="track.key_notation" class="track-key">{{ track.key_notation }}</span>
-          <span v-if="track.duration" class="track-duration">{{ formatDuration(track.duration) }}</span>
+          <span
+            v-if="track.bpm"
+            class="track-bpm"
+          >{{ Math.round(track.bpm) }} BPM</span>
+          <span
+            v-if="track.key_notation"
+            class="track-key"
+          >{{ track.key_notation }}</span>
+          <span
+            v-if="track.duration"
+            class="track-duration"
+          >{{ formatDuration(track.duration) }}</span>
         </div>
       </div>
     </div>
 
     <!-- Audio Player -->
-    <div v-if="currentTrack" class="audio-player">
+    <div
+      v-if="currentTrack"
+      class="audio-player"
+    >
       <div class="player-info">
         <span class="player-artist">{{ currentTrack.artist }}</span>
         <span class="player-separator">-</span>
         <span class="player-title">{{ currentTrack.title }}</span>
       </div>
-      <button class="player-close" @click="stopPlayback">✕</button>
+      <button
+        class="player-close"
+        @click="stopPlayback"
+      >
+        ✕
+      </button>
       <iframe
         v-if="embedUrl"
         :src="embedUrl"
         class="player-embed"
         allow="autoplay"
         frameborder="0"
-      ></iframe>
+      />
     </div>
   </div>
 </template>
@@ -91,7 +121,7 @@ const clearing = ref(false)
 const copiedTrackId = ref(null)
 
 const { data: prepList, pending, refresh } = await useFetch('/api/preparation', {
-  default: () => []
+  default: () => [],
 })
 
 const embedUrl = computed(() => {
@@ -127,7 +157,8 @@ function formatDuration(seconds) {
 function togglePlay(track) {
   if (currentTrack.value?.track_id === track.track_id) {
     currentTrack.value = null
-  } else {
+  }
+  else {
     currentTrack.value = track
   }
 }
@@ -155,10 +186,11 @@ async function removeTrack(trackId) {
   try {
     await $fetch('/api/preparation/remove', {
       method: 'POST',
-      body: { trackId }
+      body: { trackId },
     })
     await refresh()
-  } catch (e) {
+  }
+  catch (e) {
     console.error('Failed to remove track:', e)
   }
 }
@@ -171,7 +203,8 @@ async function clearList() {
     await $fetch('/api/preparation/clear', { method: 'POST' })
     currentTrack.value = null
     await refresh()
-  } catch (e) {
+  }
+  catch (e) {
     console.error('Failed to clear list:', e)
   }
   clearing.value = false

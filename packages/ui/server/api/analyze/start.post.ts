@@ -8,7 +8,7 @@ import {
   getDownloadFileById,
   updateDownloadFileStatus,
   updateDownloadFileAnalysis,
-  matchAndUpdateTrackAnalysis
+  matchAndUpdateTrackAnalysis,
 } from '../../utils/db'
 
 // Store running processes for cancellation
@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
   if (!fileIds || !Array.isArray(fileIds) || fileIds.length === 0) {
     throw createError({
       statusCode: 400,
-      message: 'fileIds array is required'
+      message: 'fileIds array is required',
     })
   }
 
@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
   if (files.length === 0) {
     throw createError({
       statusCode: 400,
-      message: 'No valid files found'
+      message: 'No valid files found',
     })
   }
 
@@ -44,7 +44,7 @@ export default defineEventHandler(async (event) => {
   if (!hostDownloadsDir) {
     throw createError({
       statusCode: 500,
-      message: 'HOST_DOWNLOADS_DIR not configured. Cannot run analyzer.'
+      message: 'HOST_DOWNLOADS_DIR not configured. Cannot run analyzer.',
     })
   }
 
@@ -56,15 +56,15 @@ export default defineEventHandler(async (event) => {
     '-v', `${hostDownloadsDir}:/input`,
     'music-analyzer',
     '--write-tags',
-    '--convert',  // Convert non-FLAC to FLAC for library integrity
-    '--skip-analyzed',  // Skip files already processed by analyzer
-    '/input'
+    '--convert', // Convert non-FLAC to FLAC for library integrity
+    '--skip-analyzed', // Skip files already processed by analyzer
+    '/input',
   ]
 
   console.log(`Starting analysis job ${job.id}: docker ${args.join(' ')}`)
 
   const proc = spawn('docker', args, {
-    stdio: ['ignore', 'pipe', 'pipe']
+    stdio: ['ignore', 'pipe', 'pipe'],
   })
 
   runningJobs.set(job.id, proc)
@@ -111,15 +111,16 @@ export default defineEventHandler(async (event) => {
 
       // Match processing file (various formats)
       // "Processing: filename.flac" or "[1/10] filename.flac" or "Analyzing filename.flac"
-      const fileMatch = line.match(/(?:Processing|Analyzing)[:\s]+(.+\.flac)/i) ||
-                        line.match(/\[(\d+)\/(\d+)\]\s*(.+\.flac)/i)
+      const fileMatch = line.match(/(?:Processing|Analyzing)[:\s]+(.+\.flac)/i)
+        || line.match(/\[(\d+)\/(\d+)\]\s*(.+\.flac)/i)
       if (fileMatch) {
         if (fileMatch[3]) {
           // Format: [1/10] filename.flac
           completed = parseInt(fileMatch[1] || '0', 10)
           totalFiles = parseInt(fileMatch[2] || '0', 10)
           currentFile = fileMatch[3]
-        } else if (fileMatch[1]) {
+        }
+        else if (fileMatch[1]) {
           currentFile = fileMatch[1]
         }
         updateAnalysisJobStatus(job.id, 'running', currentFile)
@@ -127,8 +128,8 @@ export default defineEventHandler(async (event) => {
 
       // Match completion markers
       // "✔ Processed filename.flac" or "Done: filename.flac"
-      const doneMatch = line.match(/[✔✓]\s*(?:Processed|Done|Completed)/i) ||
-                        line.match(/Successfully (?:processed|analyzed)/i)
+      const doneMatch = line.match(/[✔✓]\s*(?:Processed|Done|Completed)/i)
+        || line.match(/Successfully (?:processed|analyzed)/i)
       if (doneMatch) {
         completed++
         updateAnalysisJobProgress(job.id, completed, failed, totalFiles)
@@ -165,7 +166,7 @@ export default defineEventHandler(async (event) => {
                 title: result.title,
                 bpm: result.bpm,
                 key_notation: result.key,
-                energy: result.energy
+                energy: result.energy,
               })
               console.log(`[Job ${job.id}] Updated download file: ${result.file} -> BPM:${result.bpm} Key:${result.key} Energy:${result.energy}`)
             }
@@ -174,14 +175,15 @@ export default defineEventHandler(async (event) => {
             // Also update matching tracks in playlists
             if (result.artist && result.title) {
               const updated = matchAndUpdateTrackAnalysis(result.artist, result.title, {
-                tags: result.genres
+                tags: result.genres,
               })
               if (updated > 0) {
                 console.log(`[Job ${job.id}] Updated ${updated} track(s): ${result.artist} - ${result.title}`)
               }
             }
           }
-        } catch (e) {
+        }
+        catch (e) {
           // Ignore parse errors
         }
       }
@@ -199,15 +201,17 @@ export default defineEventHandler(async (event) => {
                     bpm: result.bpm,
                     key_notation: result.camelotKey || result.key,
                     energy: result.energy,
-                    tags: result.genres
+                    tags: result.genres,
                   })
                 }
-              } catch {
+              }
+              catch {
                 // Not valid JSON, ignore
               }
             }
           }
-        } catch {
+        }
+        catch {
           // Ignore parse errors
         }
       }
@@ -237,10 +241,12 @@ export default defineEventHandler(async (event) => {
           updateDownloadFileStatus(file.id, 'completed')
         }
       }
-    } else if (code === null) {
+    }
+    else if (code === null) {
       // Process was killed (cancelled)
       updateAnalysisJobStatus(job.id, 'cancelled')
-    } else {
+    }
+    else {
       updateAnalysisJobStatus(job.id, 'failed')
     }
 
@@ -249,7 +255,7 @@ export default defineEventHandler(async (event) => {
 
   return {
     job,
-    message: 'Analysis started'
+    message: 'Analysis started',
   }
 })
 

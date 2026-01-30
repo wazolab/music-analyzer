@@ -12,27 +12,46 @@
           type="text"
           placeholder="Paste SoundCloud or YouTube playlist URL..."
           @keyup.enter="extractPlaylist"
-        />
+        >
         <input
           v-model="playlistName"
           type="text"
           placeholder="Playlist name"
           @keyup.enter="extractPlaylist"
-        />
-        <button @click="extractPlaylist" :disabled="extracting || !playlistUrl || !playlistName">
+        >
+        <button
+          :disabled="extracting || !playlistUrl || !playlistName"
+          @click="extractPlaylist"
+        >
           {{ extracting ? 'Importing...' : 'Import' }}
         </button>
       </div>
-      <div v-if="error" class="error">{{ error }}</div>
+      <div
+        v-if="error"
+        class="error"
+      >
+        {{ error }}
+      </div>
     </section>
 
     <section class="playlists-section">
       <h2>My Playlists ({{ playlists.length }})</h2>
-      <div v-if="pending" class="loading">Loading playlists...</div>
-      <div v-else-if="playlists.length === 0" class="empty">
+      <div
+        v-if="pending"
+        class="loading"
+      >
+        Loading playlists...
+      </div>
+      <div
+        v-else-if="playlists.length === 0"
+        class="empty"
+      >
         No playlists yet. Import one above!
       </div>
-      <div v-else class="playlist-grid">
+      <div
+        v-else
+        class="playlist-grid"
+      >
         <PlaylistCard
           v-for="playlist in playlists"
           :key="playlist.id"
@@ -53,7 +72,7 @@ const extracting = ref(false)
 const error = ref('')
 
 const { data: playlists, pending, refresh } = await useFetch('/api/playlists', {
-  default: () => []
+  default: () => [],
 })
 
 async function extractPlaylist() {
@@ -66,7 +85,7 @@ async function extractPlaylist() {
     // First extract tracks from URL
     const extracted = await $fetch('/api/playlist/extract', {
       method: 'POST',
-      body: { url: playlistUrl.value }
+      body: { url: playlistUrl.value },
     })
 
     if (!extracted.tracks || extracted.tracks.length === 0) {
@@ -79,15 +98,16 @@ async function extractPlaylist() {
       body: {
         name: playlistName.value,
         url: playlistUrl.value,
-        tracks: extracted.tracks
-      }
+        tracks: extracted.tracks,
+      },
     })
 
     // Reset form and refresh list
     playlistUrl.value = ''
     playlistName.value = ''
     await refresh()
-  } catch (e) {
+  }
+  catch (e) {
     error.value = e.data?.message || e.message || 'Failed to import playlist'
   }
 
@@ -100,7 +120,8 @@ async function handleDelete(id) {
   try {
     await $fetch(`/api/playlists/${id}`, { method: 'DELETE' })
     await refresh()
-  } catch (e) {
+  }
+  catch (e) {
     error.value = e.data?.message || 'Failed to delete playlist'
   }
 }

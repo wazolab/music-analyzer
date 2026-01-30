@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
   if (!isValidUrl) {
     throw createError({
       statusCode: 400,
-      message: 'Invalid URL. Supported: SoundCloud, YouTube'
+      message: 'Invalid URL. Supported: SoundCloud, YouTube',
     })
   }
 
@@ -31,13 +31,13 @@ export default defineEventHandler(async (event) => {
       '--skip-download',
       '--no-playlist-reverse',
       '--no-cookies-from-browser',
-      url
+      url,
     ]
 
     // Use spawn to capture both stdout and stderr separately
     const { spawn } = await import('child_process')
 
-    const result = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+    const result = await new Promise<{ stdout: string, stderr: string }>((resolve, reject) => {
       const proc = spawn('yt-dlp', args)
       let stdout = ''
       let stderr = ''
@@ -69,7 +69,8 @@ export default defineEventHandler(async (event) => {
         if (track) {
           tracks.push(track)
         }
-      } catch {
+      }
+      catch {
         // Skip malformed lines
       }
     }
@@ -79,10 +80,11 @@ export default defineEventHandler(async (event) => {
     }
 
     return { tracks }
-  } catch (error: any) {
+  }
+  catch (error: any) {
     throw createError({
       statusCode: 500,
-      message: error.message || 'Failed to extract playlist'
+      message: error.message || 'Failed to extract playlist',
     })
   }
 })

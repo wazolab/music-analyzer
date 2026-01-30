@@ -15,27 +15,27 @@ import json
 import os
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
-from multiprocessing import cpu_count
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from analyzers import (
     AudioLoader,
-    RhythmAnalyzer,
-    KeyAnalyzer,
+    AudioTagger,
     EnergyAnalyzer,
     GenreClassifier,
-    AudioTagger,
+    KeyAnalyzer,
+    RhythmAnalyzer,
     TagData,
     lookup_metadata,
 )
-from utils import parse_filename, find_audio_files
-from converter import needs_conversion, convert_to_flac
+from converter import convert_to_flac, needs_conversion
+from utils import find_audio_files, parse_filename
 
 
 @dataclass
 class AnalysisResult:
     """Complete analysis result for a track."""
+
     file: str
     artist: str
     title: str
@@ -63,7 +63,7 @@ class AudioAnalyzer:
         write_tags: bool = False,
         metadata_lookup: bool = False,
         convert_to_flac: bool = False,
-        skip_analyzed: bool = False
+        skip_analyzed: bool = False,
     ):
         self.verbose = verbose
         self.write_tags = write_tags
@@ -105,7 +105,9 @@ class AudioAnalyzer:
         # Convert to FLAC if enabled and needed
         if self.convert_to_flac_enabled and needs_conversion(file_path):
             self._log("Converting to FLAC...")
-            new_path, success = convert_to_flac(file_path, delete_original=True, verbose=self.verbose)
+            new_path, success = convert_to_flac(
+                file_path, delete_original=True, verbose=self.verbose
+            )
             if success and new_path != file_path:
                 file_path = new_path
                 filename = os.path.basename(file_path)
@@ -140,13 +142,19 @@ class AudioAnalyzer:
         audio_16k = loader.load_for_ml()
         genre_result = self.genre.analyze(audio_16k)
 
-        self._log(f"\nTop 10 genres:")
+        self._log("\nTop 10 genres:")
         self._log(self.genre.format_predictions(genre_result))
 
         # Correct BPM based on genre expectations
         bpm = rhythm_result.bpm
-        detected_subgenres = {g.split("---")[1] if "---" in g else g for g in genre_result.top_genres[:3]}
-        primary_subgenre = genre_result.top_genres[0].split("---")[1] if "---" in genre_result.top_genres[0] else genre_result.top_genres[0]
+        detected_subgenres = {
+            g.split("---")[1] if "---" in g else g for g in genre_result.top_genres[:3]
+        }
+        primary_subgenre = (
+            genre_result.top_genres[0].split("---")[1]
+            if "---" in genre_result.top_genres[0]
+            else genre_result.top_genres[0]
+        )
 
         # Fast genres: double BPM if detected < 100 (half-time detection)
         fast_genres = {"Juke", "Jungle", "Drum n Bass", "Footwork", "Breakcore", "Hardcore"}
@@ -169,7 +177,9 @@ class AudioAnalyzer:
 
         if self.metadata_lookup:
             self._log("Looking up metadata...")
-            metadata = lookup_metadata(file_path, hint_artist=track_info.artist, hint_title=track_info.title)
+            metadata = lookup_metadata(
+                file_path, hint_artist=track_info.artist, hint_title=track_info.title
+            )
             if metadata.title:
                 # Determine source based on what fields are set
                 if metadata.musicbrainz_id:
@@ -226,7 +236,7 @@ class AudioAnalyzer:
             if self.tagger.write(file_path, tag_data):
                 self._log("✔ Tags written successfully")
                 written = self.tagger.read_existing(file_path)
-                self._log(f"\nFile tags:")
+                self._log("\nFile tags:")
                 self._log(f"  BPM: {written.bpm}")
                 self._log(f"  KEY: {written.key}")
                 self._log(f"  ENERGY: {written.energy}")
@@ -240,9 +250,7 @@ class AudioAnalyzer:
         return result
 
     def analyze_directory(
-        self,
-        directory: Path,
-        recursive: bool = True
+        self, directory: Path, recursive: bool = True
     ) -> Dict[str, AnalysisResult]:
         """
         Analyze all audio files in a directory (sequential).
@@ -321,7 +329,7 @@ def analyze_directory_parallel(
     metadata_lookup: bool = False,
     convert_to_flac: bool = False,
     skip_analyzed: bool = False,
-    verbose: bool = True
+    verbose: bool = True,
 ) -> Dict[str, AnalysisResult]:
     """
     Analyze all audio files in a directory using parallel processing.
@@ -385,7 +393,9 @@ def analyze_directory_parallel(
                     result = AnalysisResult(**result_dict)
                     results[path] = result
                     if verbose:
-                        print(f"[{completed}/{total}] ✔ {filename} - {result.bpm} BPM, {result.key}")
+                        print(
+                            f"[{completed}/{total}] ✔ {filename} - {result.bpm} BPM, {result.key}"
+                        )
                     # Print JSON for UI parsing
                     print(f"__RESULT__: {json.dumps(result_dict)}")
             except Exception as e:
@@ -403,51 +413,41 @@ def main():
     parser = argparse.ArgumentParser(
         description="Analyze audio files for BPM, key, energy, and genre"
     )
+    parser.add_argument("input", nargs="?", help="Audio file or folder to analyze")
+    parser.add_argument("-o", "--output", help="Output directory (not used in current mode)")
+    parser.add_argument("--json", action="store_true", help="Output results as JSON")
+    parser.add_argument("-q", "--quiet", action="store_true", help="Suppress verbose output")
     parser.add_argument(
-        "input",
-        nargs="?",
-        help="Audio file or folder to analyze"
-    )
-    parser.add_argument(
-        "-o", "--output",
-        help="Output directory (not used in current mode)"
-    )
-    parser.add_argument(
-        "--json",
+        "-w",
+        "--write-tags",
         action="store_true",
-        help="Output results as JSON"
+        help="Write analysis results to file metadata (for Traktor/Serato)",
     )
     parser.add_argument(
-        "-q", "--quiet",
+        "-l",
+        "--lookup",
         action="store_true",
-        help="Suppress verbose output"
+        help="Look up metadata via AcoustID + MusicBrainz (requires ACOUSTID_API_KEY)",
     )
     parser.add_argument(
-        "-w", "--write-tags",
+        "-c",
+        "--convert",
         action="store_true",
-        help="Write analysis results to file metadata (for Traktor/Serato)"
+        help="Convert non-FLAC files to FLAC before analysis (requires ffmpeg)",
     )
     parser.add_argument(
-        "-l", "--lookup",
+        "-s",
+        "--skip-analyzed",
         action="store_true",
-        help="Look up metadata via AcoustID + MusicBrainz (requires ACOUSTID_API_KEY)"
+        help="Skip files already processed by this analyzer (checks ANALYZER tag)",
     )
     parser.add_argument(
-        "-c", "--convert",
-        action="store_true",
-        help="Convert non-FLAC files to FLAC before analysis (requires ffmpeg)"
-    )
-    parser.add_argument(
-        "-s", "--skip-analyzed",
-        action="store_true",
-        help="Skip files already processed by this analyzer (checks ANALYZER tag)"
-    )
-    parser.add_argument(
-        "-p", "--parallel",
+        "-p",
+        "--parallel",
         type=int,
         metavar="N",
         default=0,
-        help="Use N parallel workers (0 = sequential, default)"
+        help="Use N parallel workers (0 = sequential, default)",
     )
 
     args = parser.parse_args()
@@ -468,7 +468,7 @@ def main():
             metadata_lookup=args.lookup,
             convert_to_flac=args.convert,
             skip_analyzed=args.skip_analyzed,
-            verbose=not args.quiet
+            verbose=not args.quiet,
         )
     else:
         # Sequential processing
@@ -477,7 +477,7 @@ def main():
             write_tags=args.write_tags,
             metadata_lookup=args.lookup,
             convert_to_flac=args.convert,
-            skip_analyzed=args.skip_analyzed
+            skip_analyzed=args.skip_analyzed,
         )
         analyzer.load_models()
 
@@ -490,10 +490,7 @@ def main():
     print(f"\nTotal files processed: {len(results)}")
 
     if args.json:
-        output = {
-            path: result.to_dict()
-            for path, result in results.items()
-        }
+        output = {path: result.to_dict() for path, result in results.items()}
         print(json.dumps(output, indent=2))
 
 

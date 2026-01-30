@@ -5,9 +5,8 @@ from pathlib import Path
 from typing import List, Optional
 
 from mutagen.flac import FLAC
+from mutagen.id3 import TBPM, TCON, TDRC, TKEY, TXXX
 from mutagen.mp3 import MP3
-from mutagen.id3 import ID3, TBPM, TKEY, TCON, TXXX, TDRC
-
 
 # Version marker to identify files processed by this analyzer
 ANALYZER_VERSION = "music-analyzer-1.0"
@@ -16,6 +15,7 @@ ANALYZER_VERSION = "music-analyzer-1.0"
 @dataclass
 class TagData:
     """Data to write to audio tags."""
+
     bpm: Optional[int] = None
     key: Optional[str] = None  # Camelot notation like "8A"
     energy: Optional[int] = None  # 1-10

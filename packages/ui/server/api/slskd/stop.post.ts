@@ -7,10 +7,11 @@ export default defineEventHandler(async () => {
   try {
     await execAsync('docker stop music-pipeline-slskd')
     return { success: true }
-  } catch (error: any) {
+  }
+  catch (error: any) {
     throw createError({
       statusCode: 500,
-      message: error.message || 'Failed to stop slskd'
+      message: error.message || 'Failed to stop slskd',
     })
   }
 })

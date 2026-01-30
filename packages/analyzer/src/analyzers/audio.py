@@ -10,6 +10,7 @@ from essentia.standard import MonoLoader, Resample
 @dataclass
 class AudioData:
     """Container for loaded audio data."""
+
     samples: np.ndarray
     sample_rate: int
     duration: float
@@ -42,12 +43,12 @@ class AudioLoader:
             samples = MonoLoader(
                 filename=self.file_path,
                 sampleRate=self.SAMPLE_RATE_ANALYSIS,
-                resampleQuality=self.RESAMPLE_QUALITY
+                resampleQuality=self.RESAMPLE_QUALITY,
             )()
             self._base_audio = AudioData(
                 samples=samples,
                 sample_rate=self.SAMPLE_RATE_ANALYSIS,
-                duration=len(samples) / self.SAMPLE_RATE_ANALYSIS
+                duration=len(samples) / self.SAMPLE_RATE_ANALYSIS,
             )
             self._cache[self.SAMPLE_RATE_ANALYSIS] = self._base_audio
         return self._base_audio
@@ -60,13 +61,11 @@ class AudioLoader:
         resampler = Resample(
             inputSampleRate=audio.sample_rate,
             outputSampleRate=target_sr,
-            quality=self.RESAMPLE_QUALITY
+            quality=self.RESAMPLE_QUALITY,
         )
         resampled = resampler(audio.samples)
         return AudioData(
-            samples=resampled,
-            sample_rate=target_sr,
-            duration=len(resampled) / target_sr
+            samples=resampled, sample_rate=target_sr, duration=len(resampled) / target_sr
         )
 
     def load(self, sample_rate: Optional[int] = None) -> AudioData:

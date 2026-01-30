@@ -13,6 +13,7 @@ from .audio import AudioData
 @dataclass
 class GenrePrediction:
     """Single genre prediction."""
+
     genre: str
     confidence: float
 
@@ -24,6 +25,7 @@ class GenrePrediction:
 @dataclass
 class GenreResult:
     """Result of genre classification."""
+
     top_genres: List[str]
     predictions: List[GenrePrediction] = field(default_factory=list)
 
@@ -75,9 +77,7 @@ class GenreClassifier:
         """Load TensorFlow model."""
         model_path = self.models_dir / "discogs-effnet"
         return TensorflowPredictEffnetDiscogs(
-            graphFilename="",
-            savedModel=str(model_path),
-            output="PartitionedCall"
+            graphFilename="", savedModel=str(model_path), output="PartitionedCall"
         )
 
     @property
@@ -113,35 +113,28 @@ class GenreClassifier:
 
         # Create sorted predictions list
         all_predictions = [
-            GenrePrediction(
-                genre=self._labels[i],
-                confidence=float(avg_predictions[i])
-            )
+            GenrePrediction(genre=self._labels[i], confidence=float(avg_predictions[i]))
             for i in range(len(self._labels))
         ]
         all_predictions.sort(key=lambda x: x.confidence, reverse=True)
 
         # Get top genres above threshold
         top_genres = [
-            p.genre for p in all_predictions[:self.MAX_GENRES]
+            p.genre
+            for p in all_predictions[: self.MAX_GENRES]
             if p.confidence > self.CONFIDENCE_THRESHOLD
         ]
 
         # Ensure minimum genres
         if len(top_genres) < self.MIN_GENRES:
-            top_genres = [p.genre for p in all_predictions[:self.MIN_GENRES]]
+            top_genres = [p.genre for p in all_predictions[: self.MIN_GENRES]]
 
-        return GenreResult(
-            top_genres=top_genres,
-            predictions=all_predictions[:self.MAX_GENRES]
-        )
+        return GenreResult(top_genres=top_genres, predictions=all_predictions[: self.MAX_GENRES])
 
     def format_predictions(self, result: GenreResult, top_n: int = 10) -> str:
         """Format predictions as readable string."""
         lines = []
         for i, pred in enumerate(result.predictions[:top_n]):
             bar = "█" * int(pred.confidence * 50)
-            lines.append(
-                f"  {i+1}. {pred.genre:<35} {pred.percentage:>5.1f}% {bar}"
-            )
+            lines.append(f"  {i + 1}. {pred.genre:<35} {pred.percentage:>5.1f}% {bar}")
         return "\n".join(lines)

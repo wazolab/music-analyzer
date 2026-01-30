@@ -10,7 +10,7 @@ export default defineEventHandler(async (event) => {
   if (isNaN(id)) {
     throw createError({
       statusCode: 400,
-      message: 'Invalid job ID'
+      message: 'Invalid job ID',
     })
   }
 
@@ -19,21 +19,22 @@ export default defineEventHandler(async (event) => {
   if (!job) {
     throw createError({
       statusCode: 404,
-      message: 'Job not found'
+      message: 'Job not found',
     })
   }
 
   if (job.status !== 'running') {
     throw createError({
       statusCode: 400,
-      message: 'Job is not running'
+      message: 'Job is not running',
     })
   }
 
   // Stop the docker container for this job
   try {
     await execAsync(`docker stop analyzer-job-${id}`)
-  } catch (e) {
+  }
+  catch (e) {
     // Container may have already stopped
     console.warn(`Could not stop container analyzer-job-${id}:`, e)
   }
@@ -43,6 +44,6 @@ export default defineEventHandler(async (event) => {
 
   return {
     success: true,
-    message: 'Job cancelled'
+    message: 'Job cancelled',
   }
 })

@@ -10,6 +10,7 @@ from .audio import AudioData
 @dataclass
 class EnergyResult:
     """Result of energy analysis."""
+
     level: int  # 1-10 scale
     loudness: float  # Raw loudness value in dB
 
@@ -53,7 +54,4 @@ class EnergyAnalyzer:
         raw_level = -loudness / self.LOUDNESS_SCALE
         level = int(min(self.MAX_LEVEL, max(self.MIN_LEVEL, round(raw_level))))
 
-        return EnergyResult(
-            level=level,
-            loudness=float(loudness)
-        )
+        return EnergyResult(level=level, loudness=float(loudness))

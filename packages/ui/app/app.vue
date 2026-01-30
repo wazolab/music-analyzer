@@ -6,30 +6,64 @@
       </div>
 
       <nav class="nav">
-        <NuxtLink to="/" class="nav-item" :class="{ active: route.path === '/' }">
+        <NuxtLink
+          to="/"
+          class="nav-item"
+          :class="{ active: route.path === '/' }"
+        >
           <span class="nav-icon">📋</span>
           <span>Playlists</span>
         </NuxtLink>
-        <NuxtLink to="/preparation" class="nav-item" :class="{ active: route.path === '/preparation' }">
+        <NuxtLink
+          to="/preparation"
+          class="nav-item"
+          :class="{ active: route.path === '/preparation' }"
+        >
           <span class="nav-icon">🎧</span>
           <span>DJ Prep</span>
         </NuxtLink>
-        <NuxtLink to="/analysis" class="nav-item" :class="{ active: route.path === '/analysis' }">
+        <NuxtLink
+          to="/analysis"
+          class="nav-item"
+          :class="{ active: route.path === '/analysis' }"
+        >
           <span class="nav-icon">🎵</span>
           <span>Analysis</span>
         </NuxtLink>
       </nav>
 
       <div class="sidebar-footer">
-        <div class="slskd-status" :class="slskdStatus">
+        <div
+          class="slskd-status"
+          :class="slskdStatus"
+        >
           <div class="status-row">
-            <span class="status-dot"></span>
+            <span class="status-dot" />
             <span>slskd: {{ slskdStatus }}</span>
           </div>
           <div class="status-actions">
-            <a v-if="slskdStatus === 'running'" href="http://localhost:5030" target="_blank" class="slskd-link">Open UI</a>
-            <button v-if="slskdStatus === 'stopped'" @click="startSlskd" :disabled="loading" class="btn-small">Start</button>
-            <button v-else-if="slskdStatus === 'running'" @click="stopSlskd" :disabled="loading" class="btn-small btn-danger">Stop</button>
+            <a
+              v-if="slskdStatus === 'running'"
+              href="http://localhost:5030"
+              target="_blank"
+              class="slskd-link"
+            >Open UI</a>
+            <button
+              v-if="slskdStatus === 'stopped'"
+              :disabled="loading"
+              class="btn-small"
+              @click="startSlskd"
+            >
+              Start
+            </button>
+            <button
+              v-else-if="slskdStatus === 'running'"
+              :disabled="loading"
+              class="btn-small btn-danger"
+              @click="stopSlskd"
+            >
+              Stop
+            </button>
           </div>
         </div>
       </div>
@@ -54,7 +88,8 @@ async function checkSlskdStatus() {
   try {
     const res = await $fetch('/api/slskd/status')
     slskdStatus.value = res.status
-  } catch {
+  }
+  catch {
     slskdStatus.value = 'stopped'
   }
 }
@@ -65,7 +100,8 @@ async function startSlskd() {
     await $fetch('/api/slskd/start', { method: 'POST' })
     await new Promise(r => setTimeout(r, 3000))
     await checkSlskdStatus()
-  } catch {
+  }
+  catch {
     // Status will remain as-is on failure
   }
   loading.value = false
@@ -77,7 +113,8 @@ async function stopSlskd() {
     await $fetch('/api/slskd/stop', { method: 'POST' })
     await new Promise(r => setTimeout(r, 1000))
     await checkSlskdStatus()
-  } catch {
+  }
+  catch {
     // Status will remain as-is on failure
   }
   loading.value = false

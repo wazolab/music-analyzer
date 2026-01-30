@@ -1,13 +1,19 @@
 <template>
-  <div class="file-row" :class="{ selected }">
+  <div
+    class="file-row"
+    :class="{ selected }"
+  >
     <input
       type="checkbox"
       :checked="selected"
-      @change="$emit('toggle-select')"
       class="file-checkbox"
+      @change="$emit('toggle-select')"
     >
     <span class="file-name">{{ file.filename }}</span>
-    <span v-if="topGenre" class="file-genre">{{ topGenre }}</span>
+    <span
+      v-if="topGenre"
+      class="file-genre"
+    >{{ topGenre }}</span>
     <span class="file-size">{{ formatSize(file.size_bytes) }}</span>
   </div>
 </template>
@@ -16,12 +22,12 @@
 const props = defineProps({
   file: {
     type: Object,
-    required: true
+    required: true,
   },
   selected: {
     type: Boolean,
-    default: false
-  }
+    default: false,
+  },
 })
 
 defineEmits(['toggle-select'])
@@ -41,11 +47,11 @@ const topGenre = computed(() => {
       return genre.split('---')[1]
     }
     return genre
-  } catch {
+  }
+  catch {
     return null
   }
 })
-
 
 function formatSize(bytes) {
   if (!bytes) return ''

@@ -1,13 +1,20 @@
 <template>
   <div class="playlist-card">
-    <NuxtLink :to="`/playlists/${playlist.id}`" class="card-link">
+    <NuxtLink
+      :to="`/playlists/${playlist.id}`"
+      class="card-link"
+    >
       <h3>{{ playlist.name }}</h3>
       <div class="card-meta">
         <span class="track-count">{{ playlist.track_count }} tracks</span>
         <ClientOnly><span class="updated">Updated {{ formatDate(playlist.updated_at) }}</span></ClientOnly>
       </div>
     </NuxtLink>
-    <button @click.prevent="$emit('delete', playlist.id)" class="delete-btn" title="Delete playlist">
+    <button
+      class="delete-btn"
+      title="Delete playlist"
+      @click.prevent="$emit('delete', playlist.id)"
+    >
       &times;
     </button>
   </div>
@@ -17,8 +24,8 @@
 defineProps({
   playlist: {
     type: Object,
-    required: true
-  }
+    required: true,
+  },
 })
 
 defineEmits(['delete'])
@@ -40,7 +47,7 @@ function formatDate(dateStr) {
 
   return date.toLocaleDateString('en-US', {
     month: 'short',
-    day: 'numeric'
+    day: 'numeric',
   })
 }
 </script>
