@@ -121,6 +121,8 @@
 </template>
 
 <script setup>
+definePageMeta({ pageTitle: 'Playlist Details' })
+
 const route = useRoute()
 const playlistId = computed(() => route.params.id)
 

@@ -69,6 +69,12 @@
           <UDashboardNavbar>
             <template #leading>
               <UDashboardSidebarCollapse />
+              <ClientOnly>
+                <span class="text-lg font-semibold ml-2">{{ pageTitle }}</span>
+                <template #fallback>
+                  <span class="text-lg font-semibold ml-2">&nbsp;</span>
+                </template>
+              </ClientOnly>
             </template>
 
             <template #right>
@@ -89,6 +95,10 @@
 const route = useRoute()
 const slskdStatus = ref('checking')
 const loading = ref(false)
+
+const pageTitle = computed(() => {
+  return route.meta.pageTitle || route.meta.title || 'Music Pipeline'
+})
 
 const navItems = computed(() => [
   [

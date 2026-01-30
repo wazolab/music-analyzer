@@ -1,40 +1,52 @@
 <template>
   <div class="flex flex-col gap-6">
-    <!-- Header -->
-    <div class="flex justify-between items-center flex-wrap gap-4">
-      <h1 class="text-3xl font-bold">Library</h1>
-      <div class="flex gap-2">
-        <UButton icon="i-lucide-folder-search" :loading="scanningDownloads" @click="scanDownloads">
-          Scan Downloads
-        </UButton>
-        <UButton icon="i-lucide-hard-drive" color="neutral" variant="soft" @click="openScanModal">
-          Scan External
-        </UButton>
-        <UButton icon="i-lucide-refresh-cw" color="neutral" variant="ghost" :loading="refreshing" @click="refreshLibrary" />
-      </div>
+    <!-- Action Buttons -->
+    <div class="flex justify-end gap-2">
+      <UButton icon="i-lucide-folder-search" :loading="scanningDownloads" @click="scanDownloads">
+        Scan Downloads
+      </UButton>
+      <UButton icon="i-lucide-hard-drive" color="neutral" variant="soft" @click="openScanModal">
+        Scan External
+      </UButton>
+      <UButton icon="i-lucide-refresh-cw" color="neutral" variant="ghost" :loading="refreshing" @click="refreshLibrary" />
     </div>
 
     <!-- Stats Bar -->
     <div v-if="stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-      <UCard :ui="{ body: 'p-4 text-center' }">
-        <div class="text-3xl font-bold text-primary">{{ stats.total }}</div>
-        <div class="text-sm text-muted">Tracks</div>
+      <UCard :ui="{ body: 'p-5' }">
+        <div class="size-10 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+          <UIcon name="i-lucide-music" class="size-5 text-primary" />
+        </div>
+        <div class="text-xs text-muted uppercase tracking-wide mb-1">Tracks</div>
+        <div class="text-2xl font-semibold">{{ stats.total }}</div>
       </UCard>
-      <UCard :ui="{ body: 'p-4 text-center' }">
-        <div class="text-3xl font-bold text-primary">{{ stats.byGenre?.length || 0 }}</div>
-        <div class="text-sm text-muted">Genres</div>
+      <UCard :ui="{ body: 'p-5' }">
+        <div class="size-10 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+          <UIcon name="i-lucide-music-2" class="size-5 text-primary" />
+        </div>
+        <div class="text-xs text-muted uppercase tracking-wide mb-1">Genres</div>
+        <div class="text-2xl font-semibold">{{ stats.byGenre?.length || 0 }}</div>
       </UCard>
-      <UCard :ui="{ body: 'p-4 text-center' }">
-        <div class="text-3xl font-bold text-primary">{{ stats.byLabel?.length || 0 }}</div>
-        <div class="text-sm text-muted">Labels</div>
+      <UCard :ui="{ body: 'p-5' }">
+        <div class="size-10 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+          <UIcon name="i-lucide-disc-3" class="size-5 text-primary" />
+        </div>
+        <div class="text-xs text-muted uppercase tracking-wide mb-1">Labels</div>
+        <div class="text-2xl font-semibold">{{ stats.byLabel?.length || 0 }}</div>
       </UCard>
-      <UCard :ui="{ body: 'p-4 text-center' }">
-        <div class="text-3xl font-bold" :class="offlineCount > 0 ? 'text-error' : 'text-primary'">{{ offlineCount }}</div>
-        <div class="text-sm text-muted">Offline</div>
+      <UCard :ui="{ body: 'p-5' }">
+        <div class="size-10 rounded-full flex items-center justify-center mb-4" :class="offlineCount > 0 ? 'bg-error/10' : 'bg-primary/10'">
+          <UIcon name="i-lucide-cloud-off" class="size-5" :class="offlineCount > 0 ? 'text-error' : 'text-primary'" />
+        </div>
+        <div class="text-xs text-muted uppercase tracking-wide mb-1">Offline</div>
+        <div class="text-2xl font-semibold">{{ offlineCount }}</div>
       </UCard>
-      <UCard :ui="{ body: 'p-4 text-center' }" title="Tracks not linked to AcoustID">
-        <div class="text-3xl font-bold" :class="notInAcoustidCount > 0 ? 'text-warning' : 'text-primary'">{{ notInAcoustidCount }}</div>
-        <div class="text-sm text-muted">Not in AcoustID</div>
+      <UCard :ui="{ body: 'p-5' }" title="Tracks not linked to AcoustID">
+        <div class="size-10 rounded-full flex items-center justify-center mb-4" :class="notInAcoustidCount > 0 ? 'bg-warning/10' : 'bg-primary/10'">
+          <UIcon name="i-lucide-help-circle" class="size-5" :class="notInAcoustidCount > 0 ? 'text-warning' : 'text-primary'" />
+        </div>
+        <div class="text-xs text-muted uppercase tracking-wide mb-1">Not in AcoustID</div>
+        <div class="text-2xl font-semibold">{{ notInAcoustidCount }}</div>
       </UCard>
     </div>
 
@@ -216,11 +228,14 @@
             v-for="group in groupedTracks"
             :key="group.name"
             class="cursor-pointer transition-all hover:ring-2 hover:ring-primary"
-            :ui="{ body: 'p-4 text-center' }"
+            :ui="{ body: 'p-5' }"
             @click="selectedGroup = group.name"
           >
-            <div class="text-3xl font-bold text-primary mb-1">{{ group.tracks.length }}</div>
-            <div class="text-sm text-muted truncate" :title="group.name || 'Unknown'">{{ group.name || 'Unknown' }}</div>
+            <div class="size-10 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+              <UIcon :name="viewMode === 'genre' ? 'i-lucide-music-2' : viewMode === 'label' ? 'i-lucide-disc-3' : 'i-lucide-calendar'" class="size-5 text-primary" />
+            </div>
+            <div class="text-xs text-muted uppercase tracking-wide mb-1 truncate" :title="group.name || 'Unknown'">{{ group.name || 'Unknown' }}</div>
+            <div class="text-2xl font-semibold">{{ group.tracks.length }}</div>
           </UCard>
         </div>
       </template>
@@ -418,6 +433,7 @@
 </template>
 
 <script setup>
+definePageMeta({ pageTitle: 'Library' })
 useHead({ title: 'Library' })
 
 const refreshing = ref(false)

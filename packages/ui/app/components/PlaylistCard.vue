@@ -1,6 +1,6 @@
 <template>
   <UCard
-    class="relative ring-1 ring-default transition-all hover:-translate-y-0.5 hover:ring-primary/50 hover:shadow-lg"
+    class="relative transition-all hover:-translate-y-0.5 hover:ring-1 hover:ring-primary/50"
     :ui="{ body: 'p-5' }"
   >
     <NuxtLink

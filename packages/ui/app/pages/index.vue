@@ -1,50 +1,56 @@
 <template>
   <div class="flex flex-col gap-8">
-    <h1 class="text-3xl font-bold">Dashboard</h1>
-
     <!-- Stats Overview -->
     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-      <UCard :ui="{ body: 'p-4 text-center' }">
-        <div class="text-3xl font-bold text-primary">{{ libraryStats?.total || 0 }}</div>
-        <div class="text-sm text-muted">Tracks</div>
+      <UCard :ui="{ body: 'p-5' }">
+        <div class="size-10 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+          <UIcon name="i-lucide-music" class="size-5 text-primary" />
+        </div>
+        <div class="text-xs text-muted uppercase tracking-wide mb-1">Tracks</div>
+        <div class="text-2xl font-semibold">{{ libraryStats?.total || 0 }}</div>
       </UCard>
+
       <NuxtLink to="/online-playlists" class="block">
-        <UCard
-          :ui="{ body: 'p-4 text-center' }"
-          class="h-full transition-all hover:ring-2 hover:ring-primary cursor-pointer"
-        >
-          <div class="text-3xl font-bold text-primary">{{ playlistCount }}</div>
-          <div class="text-sm text-muted">Online Playlists</div>
-        </UCard>
-      </NuxtLink>
-      <NuxtLink to="/library" class="block">
-        <UCard
-          :ui="{ body: 'p-4 text-center' }"
-          class="h-full transition-all hover:ring-2 hover:ring-warning cursor-pointer"
-        >
-          <div class="text-3xl font-bold" :class="pendingCount > 0 ? 'text-warning' : 'text-primary'">
-            {{ pendingCount }}
+        <UCard :ui="{ body: 'p-5' }" class="h-full transition-all hover:ring-2 hover:ring-primary">
+          <div class="size-10 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+            <UIcon name="i-lucide-list-music" class="size-5 text-primary" />
           </div>
-          <div class="text-sm text-muted">Pending Analysis</div>
+          <div class="text-xs text-muted uppercase tracking-wide mb-1">Online Playlists</div>
+          <div class="text-2xl font-semibold">{{ playlistCount }}</div>
         </UCard>
       </NuxtLink>
-      <UCard :ui="{ body: 'p-4 text-center' }" title="Tracks not linked to AcoustID">
-        <div class="text-3xl font-bold" :class="notInAcoustidCount > 0 ? 'text-warning' : 'text-primary'">
-          {{ notInAcoustidCount }}
+
+      <NuxtLink to="/library" class="block">
+        <UCard :ui="{ body: 'p-5' }" class="h-full transition-all hover:ring-2 hover:ring-warning">
+          <div class="size-10 rounded-full flex items-center justify-center mb-4" :class="pendingCount > 0 ? 'bg-warning/10' : 'bg-primary/10'">
+            <UIcon name="i-lucide-clock" class="size-5" :class="pendingCount > 0 ? 'text-warning' : 'text-primary'" />
+          </div>
+          <div class="text-xs text-muted uppercase tracking-wide mb-1">Pending Analysis</div>
+          <div class="text-2xl font-semibold">{{ pendingCount }}</div>
+        </UCard>
+      </NuxtLink>
+
+      <UCard :ui="{ body: 'p-5' }" title="Tracks not linked to AcoustID">
+        <div class="size-10 rounded-full flex items-center justify-center mb-4" :class="notInAcoustidCount > 0 ? 'bg-warning/10' : 'bg-primary/10'">
+          <UIcon name="i-lucide-help-circle" class="size-5" :class="notInAcoustidCount > 0 ? 'text-warning' : 'text-primary'" />
         </div>
-        <div class="text-sm text-muted">Not in AcoustID</div>
+        <div class="text-xs text-muted uppercase tracking-wide mb-1">Not in AcoustID</div>
+        <div class="text-2xl font-semibold">{{ notInAcoustidCount }}</div>
       </UCard>
-      <UCard :ui="{ body: 'p-4 text-center' }">
-        <div class="text-3xl font-bold" :class="offlineCount > 0 ? 'text-error' : 'text-primary'">
-          {{ offlineCount }}
+
+      <UCard :ui="{ body: 'p-5' }">
+        <div class="size-10 rounded-full flex items-center justify-center mb-4" :class="offlineCount > 0 ? 'bg-error/10' : 'bg-primary/10'">
+          <UIcon name="i-lucide-cloud-off" class="size-5" :class="offlineCount > 0 ? 'text-error' : 'text-primary'" />
         </div>
-        <div class="text-sm text-muted">Offline</div>
+        <div class="text-xs text-muted uppercase tracking-wide mb-1">Offline</div>
+        <div class="text-2xl font-semibold">{{ offlineCount }}</div>
       </UCard>
     </div>
   </div>
 </template>
 
 <script setup>
+definePageMeta({ pageTitle: 'Dashboard' })
 useHead({ title: 'Dashboard' })
 
 const { data: libraryData } = await useFetch('/api/library', {

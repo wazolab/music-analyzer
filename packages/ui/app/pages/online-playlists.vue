@@ -1,9 +1,7 @@
 <template>
   <div class="flex flex-col gap-8">
-    <h1 class="text-3xl font-bold">Online Playlists</h1>
-
     <!-- Import Section -->
-    <UCard class="ring-1 ring-default">
+    <UCard>
       <template #header>
         <h2 class="font-semibold">Import Playlist</h2>
       </template>
@@ -65,6 +63,7 @@
 </template>
 
 <script setup>
+definePageMeta({ pageTitle: 'Online Playlists' })
 useHead({ title: 'Online Playlists' })
 
 const playlistUrl = ref('')

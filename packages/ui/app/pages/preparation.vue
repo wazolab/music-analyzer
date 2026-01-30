@@ -2,11 +2,9 @@
   <div class="flex gap-6">
     <!-- Main Content -->
     <div class="flex-1 flex flex-col gap-6 min-w-0">
-      <!-- Header -->
-      <div class="flex justify-between items-center">
-        <h1 class="text-3xl font-bold">DJ Prep List</h1>
+      <!-- Action Button -->
+      <div v-if="prepList.length > 0" class="flex justify-end">
         <UButton
-          v-if="prepList.length > 0"
           icon="i-lucide-trash-2"
           color="error"
           variant="soft"
@@ -126,6 +124,7 @@
 </template>
 
 <script setup>
+definePageMeta({ pageTitle: 'DJ Prep' })
 useHead({ title: 'DJ Prep' })
 
 const currentTrack = ref(null)
