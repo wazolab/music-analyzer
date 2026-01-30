@@ -2,7 +2,7 @@
 
 ## Project Guidelines
 
-- **DRY / KISS**: Write DRY (Don't Repeat Yourself) and KISS (Keep It Simple, Stupid) code. Avoid unnecessary abstractions and over-engineering.
+- **DRY / KISS**: Write DRY (Don't Repeat Yourself) and KISS (Keep It Simple, Stupid) code. Avoid unnecessary abstractions and over-engineering. Extract reusable Vue components and composables when patterns repeat across files.
 - **Minimal config**: Less configuration is better. Only add config when absolutely necessary.
 - **Check documentation**: When something doesn't work as expected, consult official documentation before trying alternative approaches.
 - **README updates**: Always update README.md when adding significant changes or new features (new CLI options, new functionality, architecture changes, new dependencies)
@@ -12,6 +12,7 @@
   - Check for breaking changes in essentia.js and TensorFlow.js if audio analysis fails
 - **Use industry standards**: For audio analysis, prefer Essentia's built-in algorithms and industry standards (e.g., EBU R128 for loudness) over custom calculations. Essentia algorithms are well-tested and produce reliable, standardized results.
 - **Quality checks**: After every feature implementation, run lint and format checks to ensure code quality.
+- **UI patterns**: Mirror the Nuxt UI Dashboard template implementation and styles as much as possible (https://github.com/nuxt-ui-templates/dashboard).
 
 ## Overview
 

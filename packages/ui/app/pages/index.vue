@@ -1,51 +1,87 @@
 <template>
   <div class="flex flex-col gap-8">
     <!-- Stats Overview -->
-    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-      <UCard :ui="{ body: 'p-5' }">
-        <div class="size-10 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-          <UIcon name="i-lucide-music" class="size-5 text-primary" />
-        </div>
-        <div class="text-xs text-muted uppercase tracking-wide mb-1">Tracks</div>
-        <div class="text-2xl font-semibold">{{ libraryStats?.total || 0 }}</div>
-      </UCard>
+    <UPageGrid class="lg:grid-cols-5 gap-4 sm:gap-6 lg:gap-px">
+      <UPageCard
+        icon="i-lucide-music"
+        title="Tracks"
+        variant="subtle"
+        :ui="{
+          container: 'gap-y-1.5',
+          wrapper: 'items-start',
+          leading: 'p-2.5 rounded-full bg-primary/10 ring ring-inset ring-primary/25 flex-col',
+          title: 'font-normal text-muted text-xs uppercase',
+        }"
+        class="lg:rounded-none first:rounded-l-lg last:rounded-r-lg hover:z-1"
+      >
+        <span class="text-2xl font-semibold text-highlighted">{{ libraryStats?.total || 0 }}</span>
+      </UPageCard>
 
-      <NuxtLink to="/online-playlists" class="block">
-        <UCard :ui="{ body: 'p-5' }" class="h-full transition-all hover:ring-2 hover:ring-primary">
-          <div class="size-10 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-            <UIcon name="i-lucide-list-music" class="size-5 text-primary" />
-          </div>
-          <div class="text-xs text-muted uppercase tracking-wide mb-1">Online Playlists</div>
-          <div class="text-2xl font-semibold">{{ playlistCount }}</div>
-        </UCard>
-      </NuxtLink>
+      <UPageCard
+        icon="i-lucide-list-music"
+        title="Online Playlists"
+        to="/online-playlists"
+        variant="subtle"
+        :ui="{
+          container: 'gap-y-1.5',
+          wrapper: 'items-start',
+          leading: 'p-2.5 rounded-full bg-primary/10 ring ring-inset ring-primary/25 flex-col',
+          title: 'font-normal text-muted text-xs uppercase',
+        }"
+        class="lg:rounded-none first:rounded-l-lg last:rounded-r-lg hover:z-1"
+      >
+        <span class="text-2xl font-semibold text-highlighted">{{ playlistCount }}</span>
+      </UPageCard>
 
-      <NuxtLink to="/library" class="block">
-        <UCard :ui="{ body: 'p-5' }" class="h-full transition-all hover:ring-2 hover:ring-warning">
-          <div class="size-10 rounded-full flex items-center justify-center mb-4" :class="pendingCount > 0 ? 'bg-warning/10' : 'bg-primary/10'">
-            <UIcon name="i-lucide-clock" class="size-5" :class="pendingCount > 0 ? 'text-warning' : 'text-primary'" />
-          </div>
-          <div class="text-xs text-muted uppercase tracking-wide mb-1">Pending Analysis</div>
-          <div class="text-2xl font-semibold">{{ pendingCount }}</div>
-        </UCard>
-      </NuxtLink>
+      <UPageCard
+        icon="i-lucide-clock"
+        title="Pending Analysis"
+        to="/library"
+        variant="subtle"
+        :ui="{
+          container: 'gap-y-1.5',
+          wrapper: 'items-start',
+          leading: `p-2.5 rounded-full ring ring-inset flex-col ${pendingCount > 0 ? 'bg-warning/10 ring-warning/25' : 'bg-primary/10 ring-primary/25'}`,
+          leadingIcon: pendingCount > 0 ? 'text-warning' : '',
+          title: 'font-normal text-muted text-xs uppercase',
+        }"
+        class="lg:rounded-none first:rounded-l-lg last:rounded-r-lg hover:z-1"
+      >
+        <span class="text-2xl font-semibold" :class="pendingCount > 0 ? 'text-warning' : 'text-highlighted'">{{ pendingCount }}</span>
+      </UPageCard>
 
-      <UCard :ui="{ body: 'p-5' }" title="Tracks not linked to AcoustID">
-        <div class="size-10 rounded-full flex items-center justify-center mb-4" :class="notInAcoustidCount > 0 ? 'bg-warning/10' : 'bg-primary/10'">
-          <UIcon name="i-lucide-help-circle" class="size-5" :class="notInAcoustidCount > 0 ? 'text-warning' : 'text-primary'" />
-        </div>
-        <div class="text-xs text-muted uppercase tracking-wide mb-1">Not in AcoustID</div>
-        <div class="text-2xl font-semibold">{{ notInAcoustidCount }}</div>
-      </UCard>
+      <UPageCard
+        icon="i-lucide-help-circle"
+        title="Not in AcoustID"
+        variant="subtle"
+        :ui="{
+          container: 'gap-y-1.5',
+          wrapper: 'items-start',
+          leading: 'p-2.5 rounded-full ring ring-inset flex-col bg-warning/10 ring-warning/25',
+          leadingIcon: 'text-warning',
+          title: 'font-normal text-muted text-xs uppercase',
+        }"
+        class="lg:rounded-none first:rounded-l-lg last:rounded-r-lg hover:z-1"
+      >
+        <span class="text-2xl font-semibold text-warning">{{ notInAcoustidCount }}</span>
+      </UPageCard>
 
-      <UCard :ui="{ body: 'p-5' }">
-        <div class="size-10 rounded-full flex items-center justify-center mb-4" :class="offlineCount > 0 ? 'bg-error/10' : 'bg-primary/10'">
-          <UIcon name="i-lucide-cloud-off" class="size-5" :class="offlineCount > 0 ? 'text-error' : 'text-primary'" />
-        </div>
-        <div class="text-xs text-muted uppercase tracking-wide mb-1">Offline</div>
-        <div class="text-2xl font-semibold">{{ offlineCount }}</div>
-      </UCard>
-    </div>
+      <UPageCard
+        icon="i-lucide-cloud-off"
+        title="Offline"
+        variant="subtle"
+        :ui="{
+          container: 'gap-y-1.5',
+          wrapper: 'items-start',
+          leading: `p-2.5 rounded-full ring ring-inset flex-col ${offlineCount > 0 ? 'bg-error/10 ring-error/25' : 'bg-primary/10 ring-primary/25'}`,
+          leadingIcon: offlineCount > 0 ? 'text-error' : '',
+          title: 'font-normal text-muted text-xs uppercase',
+        }"
+        class="lg:rounded-none first:rounded-l-lg last:rounded-r-lg hover:z-1"
+      >
+        <span class="text-2xl font-semibold" :class="offlineCount > 0 ? 'text-error' : 'text-highlighted'">{{ offlineCount }}</span>
+      </UPageCard>
+    </UPageGrid>
   </div>
 </template>
 

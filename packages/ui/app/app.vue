@@ -1,7 +1,7 @@
 <template>
   <UApp>
     <UDashboardGroup>
-      <UDashboardSidebar collapsible>
+      <UDashboardSidebar class="bg-elevated/25" collapsible>
         <template #header="{ collapsed }">
           <div class="flex items-center gap-2" :class="{ 'justify-center': collapsed }">
             <UIcon name="i-lucide-music" class="size-6 text-primary" />

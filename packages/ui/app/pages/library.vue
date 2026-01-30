@@ -2,53 +2,93 @@
   <div class="flex flex-col gap-6">
     <!-- Action Buttons -->
     <div class="flex justify-end gap-2">
-      <UButton icon="i-lucide-folder-search" :loading="scanningDownloads" @click="scanDownloads">
+      <UButton icon="i-lucide-folder-search" color="neutral" variant="soft" :loading="scanningDownloads" @click="scanDownloads">
         Scan Downloads
       </UButton>
       <UButton icon="i-lucide-hard-drive" color="neutral" variant="soft" @click="openScanModal">
         Scan External
       </UButton>
-      <UButton icon="i-lucide-refresh-cw" color="neutral" variant="ghost" :loading="refreshing" @click="refreshLibrary" />
     </div>
 
     <!-- Stats Bar -->
-    <div v-if="stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-      <UCard :ui="{ body: 'p-5' }">
-        <div class="size-10 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-          <UIcon name="i-lucide-music" class="size-5 text-primary" />
-        </div>
-        <div class="text-xs text-muted uppercase tracking-wide mb-1">Tracks</div>
-        <div class="text-2xl font-semibold">{{ stats.total }}</div>
-      </UCard>
-      <UCard :ui="{ body: 'p-5' }">
-        <div class="size-10 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-          <UIcon name="i-lucide-music-2" class="size-5 text-primary" />
-        </div>
-        <div class="text-xs text-muted uppercase tracking-wide mb-1">Genres</div>
-        <div class="text-2xl font-semibold">{{ stats.byGenre?.length || 0 }}</div>
-      </UCard>
-      <UCard :ui="{ body: 'p-5' }">
-        <div class="size-10 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-          <UIcon name="i-lucide-disc-3" class="size-5 text-primary" />
-        </div>
-        <div class="text-xs text-muted uppercase tracking-wide mb-1">Labels</div>
-        <div class="text-2xl font-semibold">{{ stats.byLabel?.length || 0 }}</div>
-      </UCard>
-      <UCard :ui="{ body: 'p-5' }">
-        <div class="size-10 rounded-full flex items-center justify-center mb-4" :class="offlineCount > 0 ? 'bg-error/10' : 'bg-primary/10'">
-          <UIcon name="i-lucide-cloud-off" class="size-5" :class="offlineCount > 0 ? 'text-error' : 'text-primary'" />
-        </div>
-        <div class="text-xs text-muted uppercase tracking-wide mb-1">Offline</div>
-        <div class="text-2xl font-semibold">{{ offlineCount }}</div>
-      </UCard>
-      <UCard :ui="{ body: 'p-5' }" title="Tracks not linked to AcoustID">
-        <div class="size-10 rounded-full flex items-center justify-center mb-4" :class="notInAcoustidCount > 0 ? 'bg-warning/10' : 'bg-primary/10'">
-          <UIcon name="i-lucide-help-circle" class="size-5" :class="notInAcoustidCount > 0 ? 'text-warning' : 'text-primary'" />
-        </div>
-        <div class="text-xs text-muted uppercase tracking-wide mb-1">Not in AcoustID</div>
-        <div class="text-2xl font-semibold">{{ notInAcoustidCount }}</div>
-      </UCard>
-    </div>
+    <UPageGrid v-if="stats" class="lg:grid-cols-5 gap-4 sm:gap-6 lg:gap-px">
+      <UPageCard
+        icon="i-lucide-music"
+        title="Tracks"
+        variant="subtle"
+        :ui="{
+          container: 'gap-y-1.5',
+          wrapper: 'items-start',
+          leading: 'p-2.5 rounded-full bg-primary/10 ring ring-inset ring-primary/25 flex-col',
+          title: 'font-normal text-muted text-xs uppercase',
+        }"
+        class="lg:rounded-none first:rounded-l-lg last:rounded-r-lg hover:z-1"
+      >
+        <span class="text-2xl font-semibold text-highlighted">{{ stats.total }}</span>
+      </UPageCard>
+
+      <UPageCard
+        icon="i-lucide-music-2"
+        title="Genres"
+        variant="subtle"
+        :ui="{
+          container: 'gap-y-1.5',
+          wrapper: 'items-start',
+          leading: 'p-2.5 rounded-full bg-primary/10 ring ring-inset ring-primary/25 flex-col',
+          title: 'font-normal text-muted text-xs uppercase',
+        }"
+        class="lg:rounded-none first:rounded-l-lg last:rounded-r-lg hover:z-1"
+      >
+        <span class="text-2xl font-semibold text-highlighted">{{ stats.byGenre?.length || 0 }}</span>
+      </UPageCard>
+
+      <UPageCard
+        icon="i-lucide-disc-3"
+        title="Labels"
+        variant="subtle"
+        :ui="{
+          container: 'gap-y-1.5',
+          wrapper: 'items-start',
+          leading: 'p-2.5 rounded-full bg-primary/10 ring ring-inset ring-primary/25 flex-col',
+          title: 'font-normal text-muted text-xs uppercase',
+        }"
+        class="lg:rounded-none first:rounded-l-lg last:rounded-r-lg hover:z-1"
+      >
+        <span class="text-2xl font-semibold text-highlighted">{{ stats.byLabel?.length || 0 }}</span>
+      </UPageCard>
+
+      <UPageCard
+        icon="i-lucide-cloud-off"
+        title="Offline"
+        variant="subtle"
+        :ui="{
+          container: 'gap-y-1.5',
+          wrapper: 'items-start',
+          leading: `p-2.5 rounded-full ring ring-inset flex-col ${offlineCount > 0 ? 'bg-error/10 ring-error/25' : 'bg-primary/10 ring-primary/25'}`,
+          leadingIcon: offlineCount > 0 ? 'text-error' : '',
+          title: 'font-normal text-muted text-xs uppercase',
+        }"
+        class="lg:rounded-none first:rounded-l-lg last:rounded-r-lg hover:z-1"
+      >
+        <span class="text-2xl font-semibold" :class="offlineCount > 0 ? 'text-error' : 'text-highlighted'">{{ offlineCount }}</span>
+      </UPageCard>
+
+      <UPageCard
+        icon="i-lucide-help-circle"
+        title="Not in AcoustID"
+        variant="subtle"
+        :ui="{
+          container: 'gap-y-1.5',
+          wrapper: 'items-start',
+          leading: 'p-2.5 rounded-full ring ring-inset flex-col bg-warning/10 ring-warning/25',
+          leadingIcon: 'text-warning',
+          title: 'font-normal text-muted text-xs uppercase',
+        }"
+        class="lg:rounded-none first:rounded-l-lg last:rounded-r-lg hover:z-1"
+      >
+        <span class="text-2xl font-semibold text-warning">{{ notInAcoustidCount }}</span>
+      </UPageCard>
+    </UPageGrid>
 
     <!-- Pending Section -->
     <UCard v-if="pendingTracks.length > 0" :ui="{ body: showPending ? 'p-0' : 'hidden' }">
@@ -224,19 +264,23 @@
 
         <!-- Group Cards Grid -->
         <div v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-          <UCard
+          <UPageCard
             v-for="group in groupedTracks"
             :key="group.name"
-            class="cursor-pointer transition-all hover:ring-2 hover:ring-primary"
-            :ui="{ body: 'p-5' }"
+            :icon="viewMode === 'genre' ? 'i-lucide-music-2' : viewMode === 'label' ? 'i-lucide-disc-3' : 'i-lucide-calendar'"
+            :title="group.name || 'Unknown'"
+            variant="subtle"
+            :ui="{
+              container: 'gap-y-1.5',
+              wrapper: 'items-start',
+              leading: 'p-2.5 rounded-full bg-primary/10 ring ring-inset ring-primary/25 flex-col',
+              title: 'font-normal text-muted text-xs uppercase truncate',
+            }"
+            class="cursor-pointer hover:z-1"
             @click="selectedGroup = group.name"
           >
-            <div class="size-10 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-              <UIcon :name="viewMode === 'genre' ? 'i-lucide-music-2' : viewMode === 'label' ? 'i-lucide-disc-3' : 'i-lucide-calendar'" class="size-5 text-primary" />
-            </div>
-            <div class="text-xs text-muted uppercase tracking-wide mb-1 truncate" :title="group.name || 'Unknown'">{{ group.name || 'Unknown' }}</div>
-            <div class="text-2xl font-semibold">{{ group.tracks.length }}</div>
-          </UCard>
+            <span class="text-2xl font-semibold text-highlighted">{{ group.tracks.length }}</span>
+          </UPageCard>
         </div>
       </template>
 
@@ -436,7 +480,6 @@
 definePageMeta({ pageTitle: 'Library' })
 useHead({ title: 'Library' })
 
-const refreshing = ref(false)
 const viewMode = ref('genre')
 const selectedGroup = ref(null)
 const searchQuery = ref('')
