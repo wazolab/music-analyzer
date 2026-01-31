@@ -386,13 +386,56 @@ import { getTopGenre, matchesGenreFilter } from '~/composables/useGenre'
 definePageMeta({ pageTitle: 'Library' })
 useHead({ title: 'Library' })
 
-const viewMode = ref('genre')
-const selectedGroup = ref(null)
+const route = useRoute()
+const router = useRouter()
+
+// URL-synced state
+const viewMode = computed({
+  get: () => {
+    const v = route.query.view
+    return ['genre', 'label', 'year', 'list'].includes(v) ? v : 'genre'
+  },
+  set: (value) => {
+    router.replace({ query: { ...route.query, view: value, group: undefined } })
+  },
+})
+
+const selectedGroup = computed({
+  get: () => route.query.group || null,
+  set: (value) => {
+    router.replace({ query: { ...route.query, group: value || undefined } })
+  },
+})
+
+const filterGenre = computed({
+  get: () => route.query.genre || '',
+  set: (value) => {
+    router.replace({ query: { ...route.query, genre: value || undefined } })
+  },
+})
+
+const filterLabel = computed({
+  get: () => route.query.label || '',
+  set: (value) => {
+    router.replace({ query: { ...route.query, label: value || undefined } })
+  },
+})
+
+const filterYear = computed({
+  get: () => route.query.year || '',
+  set: (value) => {
+    router.replace({ query: { ...route.query, year: value || undefined } })
+  },
+})
+
+const filterStatus = computed({
+  get: () => route.query.status || '',
+  set: (value) => {
+    router.replace({ query: { ...route.query, status: value || undefined } })
+  },
+})
+
 const searchQuery = ref('')
-const filterGenre = ref('')
-const filterLabel = ref('')
-const filterYear = ref('')
-const filterStatus = ref('')
 const filterNotInAcoustid = ref(false)
 
 const viewTabs = [
@@ -401,11 +444,6 @@ const viewTabs = [
   { label: 'By Year', value: 'year' },
   { label: 'List', value: 'list' },
 ]
-
-// Clear selected group when view mode changes
-watch(viewMode, () => {
-  selectedGroup.value = null
-})
 
 const selectedGroupTracks = computed(() => {
   if (!selectedGroup.value) return []
