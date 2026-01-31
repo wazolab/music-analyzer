@@ -17,7 +17,7 @@
         <div class="flex justify-between items-start gap-5">
           <div class="flex-1">
             <UButton
-              to="/online-playlists"
+              :to="backUrl"
               variant="link"
               color="neutral"
               icon="i-lucide-arrow-left"
@@ -180,6 +180,12 @@ watch(prepList, (list) => {
 }, { immediate: true })
 
 const embedUrl = computed(() => getEmbedUrl(currentTrack.value?.source_url))
+
+const backUrl = computed(() => {
+  const url = playlist.value?.url || ''
+  const source = url.includes('youtube.com') || url.includes('youtu.be') ? 'youtube' : 'soundcloud'
+  return `/online-playlists?source=${source}`
+})
 
 async function syncPlaylist() {
   syncing.value = true
