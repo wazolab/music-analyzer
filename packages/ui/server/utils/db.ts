@@ -791,6 +791,45 @@ export function markLibraryTracksOnline(storageDevice: string): number {
   return result.changes
 }
 
+// Get all unique storage devices in the library
+export function getStorageDevices(): string[] {
+  const rows = db.prepare(`
+    SELECT DISTINCT storage_device
+    FROM library_tracks
+    WHERE storage_device IS NOT NULL
+  `).all() as { storage_device: string }[]
+  return rows.map(r => r.storage_device)
+}
+
+// Sync storage status based on file accessibility
+export function syncStorageStatus(mountedPaths: string[]): { online: number, offline: number } {
+  let online = 0
+  let offline = 0
+
+  // Get all tracks with external storage
+  const tracks = db.prepare(`
+    SELECT id, file_path, storage_status
+    FROM library_tracks
+    WHERE storage_device IS NOT NULL AND file_path IS NOT NULL
+  `).all() as { id: number, file_path: string, storage_status: string }[]
+
+  for (const track of tracks) {
+    // Check if file path starts with any mounted path
+    const isMounted = mountedPaths.some(mp => track.file_path.startsWith(mp))
+
+    if (isMounted && track.storage_status === 'offline') {
+      db.prepare('UPDATE library_tracks SET storage_status = ? WHERE id = ?').run('available', track.id)
+      online++
+    }
+    else if (!isMounted && track.storage_status === 'available') {
+      db.prepare('UPDATE library_tracks SET storage_status = ? WHERE id = ?').run('offline', track.id)
+      offline++
+    }
+  }
+
+  return { online, offline }
+}
+
 export function getLibraryStats(): {
   total: number
   pending: number

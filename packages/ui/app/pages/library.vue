@@ -144,7 +144,7 @@
           <UButton size="sm" color="neutral" variant="soft" :loading="analyzing" @click="reanalyzeSelected">
             Re-analyze
           </UButton>
-          <UButton size="sm" @click="showPublishModal = true">
+          <UButton size="sm" @click="openPublishModal">
             Publish to Drive
           </UButton>
         </div>
@@ -316,7 +316,7 @@
     </UModal>
 
     <AnalysisProgress v-if="currentJob" :job-id="currentJob.id" @close="handleJobClose" />
-    <PublishModal v-if="showPublishModal" :track-ids="Array.from(selectedTracks)" :volumes="volumes" @close="showPublishModal = false" @published="handlePublished" />
+    <PublishModal v-if="showPublishModal" :track-ids="Array.from(selectedTracks)" :volumes="volumes" :loading-volumes="loadingVolumes" @close="showPublishModal = false" @published="handlePublished" />
     <TrackEditModal v-if="showEditModal && editingTrack" :track="editingTrack" @close="closeEditModal" @saved="handleTrackSaved" />
 
     <!-- MusicBrainz Modal -->
@@ -455,6 +455,46 @@ const musicBrainzSearchUrl = computed(() => {
 const { data: libraryData, pending, refresh } = await useFetch('/api/library', {
   key: 'library-data',
   default: () => ({ tracks: [], pendingTracks: [], stats: { total: 0, byGenre: [], byLabel: [], byYear: [], byStatus: [] }, settings: {} }),
+})
+
+// Silent auto-refresh every 10 seconds to sync storage status (no loading flicker)
+const refreshInterval = ref(null)
+
+async function silentRefresh() {
+  try {
+    const newData = await $fetch('/api/library')
+    if (!newData) return
+
+    // Check if storage status changed for any track
+    let hasChanges = false
+    if (newData.tracks && libraryData.value?.tracks) {
+      for (const newTrack of newData.tracks) {
+        const existing = libraryData.value.tracks.find(t => t.id === newTrack.id)
+        if (existing && existing.storage_status !== newTrack.storage_status) {
+          hasChanges = true
+          break
+        }
+      }
+    }
+
+    // Only update if there are actual changes
+    if (hasChanges) {
+      libraryData.value = newData
+    }
+  }
+  catch {
+    // Silent fail - don't disrupt UI
+  }
+}
+
+onMounted(() => {
+  refreshInterval.value = setInterval(silentRefresh, 10000)
+})
+
+onUnmounted(() => {
+  if (refreshInterval.value) {
+    clearInterval(refreshInterval.value)
+  }
 })
 
 const tracks = computed(() => libraryData.value?.tracks || [])
@@ -659,6 +699,18 @@ async function handlePublished(result) {
   selectAllLibrary.value = false
   await refresh()
   if (result.success > 0) alert(`Published ${result.success} track(s).`)
+}
+
+async function openPublishModal() {
+  loadingVolumes.value = true
+  showPublishModal.value = true
+  try {
+    volumes.value = await $fetch('/api/volumes')
+  }
+  catch {
+    volumes.value = []
+  }
+  loadingVolumes.value = false
 }
 
 function openMusicBrainzModal(track) {

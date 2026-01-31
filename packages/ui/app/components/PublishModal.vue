@@ -23,15 +23,15 @@
           <!-- Step 1: Select destination drive -->
           <div class="space-y-2">
             <label class="text-sm font-medium">Destination Drive</label>
-            <div v-if="loadingVolumes" class="text-muted text-center py-4">
+            <div v-if="props.loadingVolumes" class="text-muted text-center py-4">
               Detecting mounted volumes...
             </div>
-            <div v-else-if="volumes.length === 0" class="text-muted text-center py-4">
+            <div v-else-if="props.volumes.length === 0" class="text-muted text-center py-4">
               No external storage detected. Mount a drive first.
             </div>
             <div v-else class="grid grid-cols-2 gap-3">
               <UCard
-                v-for="vol in volumes"
+                v-for="vol in props.volumes"
                 :key="vol.path"
                 class="cursor-pointer transition-all"
                 :class="{ 'ring-2 ring-primary': selectedVolume?.path === vol.path }"
@@ -125,6 +125,10 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  loadingVolumes: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const emit = defineEmits(['close', 'published'])
@@ -135,7 +139,6 @@ const deleteSource = ref(true)
 const publishing = ref(false)
 const progress = ref(0)
 const error = ref('')
-const loadingVolumes = ref(false)
 
 const canPublish = computed(() => {
   return selectedVolume.value && libraryRoot.value && props.trackIds.length > 0
