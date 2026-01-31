@@ -71,12 +71,12 @@ function collectPlaylistEntries(
 ): void {
   const relativePath = `../${filename}`
 
-  // by-genre (max 3 genres)
+  // by-genre (primary genre only, matching library view behavior)
   if (track.genres) {
     try {
       const genres = JSON.parse(track.genres) as string[]
-      for (const genre of genres.slice(0, 3)) {
-        const simplifiedGenre = simplifyGenre(genre)
+      if (genres.length > 0) {
+        const simplifiedGenre = simplifyGenre(genres[0])
         const key = sanitizePath(simplifiedGenre)
         if (!playlists.byGenre.has(key)) {
           playlists.byGenre.set(key, [])
