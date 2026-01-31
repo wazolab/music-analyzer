@@ -219,7 +219,7 @@
             class="cursor-pointer hover:z-1"
             @click="selectedGroup = group.name"
           >
-            <div class="flex justify-between items-end">
+            <div class="flex justify-between items-center">
               <span class="font-normal text-muted text-sm uppercase truncate">{{ group.name || 'Unknown' }}</span>
               <span class="text-2xl font-semibold text-highlighted">{{ group.tracks.length }}</span>
             </div>
