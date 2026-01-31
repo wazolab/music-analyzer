@@ -26,14 +26,15 @@
               Back to playlists
             </UButton>
             <div v-if="!editingTitle" class="flex items-center gap-2 mb-2">
-              <h2
-                class="text-2xl font-bold cursor-pointer hover:text-primary transition-colors"
-                title="Click to edit"
+              <h2 class="text-2xl font-bold">{{ playlist.name }}</h2>
+              <UButton
+                icon="i-lucide-pencil"
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                title="Edit name"
                 @click="startTitleEdit"
-              >
-                {{ playlist.name }}
-              </h2>
-              <UIcon name="i-lucide-pencil" class="size-4 text-muted" />
+              />
             </div>
             <div v-else class="flex items-center gap-2 mb-2">
               <UInput
