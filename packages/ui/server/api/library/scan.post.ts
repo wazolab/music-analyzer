@@ -5,6 +5,7 @@ import { spawn } from 'child_process'
 import {
   getLibraryTrackByFingerprint,
   upsertLibraryTrackFromScan,
+  setDriveScanPath,
 } from '../../utils/db'
 import { needsConversion, convertToFlac } from '../../utils/converter'
 import type { LibraryTrack, TrackSource } from '../../utils/types'
@@ -272,6 +273,11 @@ export default defineEventHandler(async (event) => {
   console.log(`[Library Scan] Starting scan of: ${path} (source: ${trackSource}${storageDevice ? `, device: ${storageDevice}` : ''})`)
 
   const result = await scanDirectory(path, trackSource, storageDevice, recursive)
+
+  // Save scan path per drive for future reference
+  if (storageDevice) {
+    setDriveScanPath(storageDevice, path)
+  }
 
   console.log(`[Library Scan] Complete: ${result.found} found, ${result.converted} converted, ${result.matched} matched, ${result.new} new, ${result.needsAnalysis} need analysis`)
 

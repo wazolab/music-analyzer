@@ -619,9 +619,25 @@ async function openScanModal() {
   loadingVolumes.value = false
 }
 
-function selectVolume(volume) {
-  scanPath.value = volume.path
+async function selectVolume(volume) {
   scanDevice.value = volume.label
+
+  // Load saved scan path for this drive
+  try {
+    const settings = await $fetch('/api/settings/drive', {
+      query: { drive: volume.label },
+    })
+    if (settings.scanPath) {
+      scanPath.value = settings.scanPath
+      return
+    }
+  }
+  catch {
+    // No saved settings, use default
+  }
+
+  // Default to volume path
+  scanPath.value = volume.path
 }
 
 async function startScan() {

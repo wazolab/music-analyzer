@@ -144,11 +144,25 @@ const canPublish = computed(() => {
   return selectedVolume.value && libraryRoot.value && props.trackIds.length > 0
 })
 
-function selectVolume(volume) {
+async function selectVolume(volume) {
   selectedVolume.value = volume
-  if (!libraryRoot.value) {
-    libraryRoot.value = `${volume.path}/Music`
+
+  // Load saved library root for this drive
+  try {
+    const settings = await $fetch('/api/settings/drive', {
+      query: { drive: volume.label },
+    })
+    if (settings.libraryRoot) {
+      libraryRoot.value = settings.libraryRoot
+      return
+    }
   }
+  catch {
+    // No saved settings, use default
+  }
+
+  // Default to volume path + /Music
+  libraryRoot.value = `${volume.path}/Music`
 }
 
 async function publish() {

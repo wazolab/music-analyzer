@@ -905,6 +905,29 @@ export function setLibrarySetting(key: string, value: string): void {
   `).run(key, value)
 }
 
+// Drive-specific settings (stored as library_root:<drive_label>)
+export function getDriveLibraryRoot(driveLabel: string): string | null {
+  const key = `library_root:${driveLabel}`
+  const row = db.prepare('SELECT value FROM library_settings WHERE key = ?').get(key) as { value: string } | undefined
+  return row?.value ?? null
+}
+
+export function setDriveLibraryRoot(driveLabel: string, path: string): void {
+  const key = `library_root:${driveLabel}`
+  setLibrarySetting(key, path)
+}
+
+export function getDriveScanPath(driveLabel: string): string | null {
+  const key = `scan_path:${driveLabel}`
+  const row = db.prepare('SELECT value FROM library_settings WHERE key = ?').get(key) as { value: string } | undefined
+  return row?.value ?? null
+}
+
+export function setDriveScanPath(driveLabel: string, path: string): void {
+  const key = `scan_path:${driveLabel}`
+  setLibrarySetting(key, path)
+}
+
 // Pending tracks operations (for unified library view)
 export function getPendingTracks(): LibraryTrack[] {
   return db.prepare(`

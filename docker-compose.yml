@@ -13,7 +13,7 @@ services:
       - ui-data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock
       - ${DOWNLOADS_DIR:-./downloads}:/app/downloads
-      - /media:/media:rw
+      - /media:/media:rw,rslave
     environment:
       - NODE_ENV=production
       - DATA_DIR=/app/data
@@ -57,7 +57,7 @@ services:
       - "8000:8000"
     volumes:
       - ${DOWNLOADS_DIR:-./downloads}:/input:rw
-      - /media:/media:rw
+      - /media:/media:rw,rslave
     environment:
       - ACOUSTID_API_KEY=${ACOUSTID_API_KEY:-}
       - ACOUSTID_USER_KEY=${ACOUSTID_USER_KEY:-}

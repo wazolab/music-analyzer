@@ -1,6 +1,6 @@
 import { access, mkdir, constants } from 'fs/promises'
 import { dirname } from 'path'
-import { getLibraryTracksByIds, setLibrarySetting } from '../../utils/db'
+import { getLibraryTracksByIds, setDriveLibraryRoot } from '../../utils/db'
 import { publishTracks } from '../../utils/publish'
 
 /**
@@ -97,9 +97,8 @@ export default defineEventHandler(async (event) => {
     deleteSource,
   })
 
-  // Save library root as setting for future reference
-  setLibrarySetting('library_root', destinationRoot)
-  setLibrarySetting('storage_device_name', storageDevice)
+  // Save library root per drive for future reference
+  setDriveLibraryRoot(storageDevice, destinationRoot)
 
   console.log(`[Publish] Complete: ${result.success} published, ${result.errors.length} errors`)
 
