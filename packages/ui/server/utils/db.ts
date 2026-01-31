@@ -293,6 +293,11 @@ export function updatePlaylistTimestamp(id: number): void {
   db.prepare('UPDATE playlists SET updated_at = datetime(\'now\') WHERE id = ?').run(id)
 }
 
+export function updatePlaylistName(id: number, name: string): boolean {
+  const result = db.prepare('UPDATE playlists SET name = ?, updated_at = datetime(\'now\') WHERE id = ?').run(name, id)
+  return result.changes > 0
+}
+
 // Track operations
 export function getTracksByPlaylistId(playlistId: number): Track[] {
   return db.prepare('SELECT * FROM tracks WHERE playlist_id = ? ORDER BY id').all(playlistId) as Track[]

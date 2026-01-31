@@ -4,10 +4,11 @@
     :ui="{ body: 'p-5' }"
   >
     <NuxtLink
+      v-if="!editing"
       :to="`/playlists/${playlist.id}`"
       class="block"
     >
-      <h3 class="text-lg font-medium mb-3 pr-8">{{ playlist.name }}</h3>
+      <h3 class="text-lg font-medium mb-3 pr-16">{{ playlist.name }}</h3>
       <div class="flex flex-col gap-1 text-sm">
         <span class="text-primary">{{ playlist.track_count }} tracks</span>
         <ClientOnly>
@@ -15,27 +16,90 @@
         </ClientOnly>
       </div>
     </NuxtLink>
-    <UButton
-      icon="i-lucide-trash-2"
-      color="error"
-      variant="ghost"
-      size="xs"
-      class="absolute top-3 right-3"
-      title="Delete playlist"
-      @click.prevent="$emit('delete', playlist.id)"
-    />
+    <div v-else class="space-y-3">
+      <UInput
+        ref="nameInput"
+        v-model="editName"
+        placeholder="Playlist name"
+        autofocus
+        @keyup.enter="saveEdit"
+        @keyup.escape="cancelEdit"
+      />
+      <div class="flex gap-2">
+        <UButton size="xs" :loading="saving" @click="saveEdit">Save</UButton>
+        <UButton size="xs" color="neutral" variant="ghost" :disabled="saving" @click="cancelEdit">Cancel</UButton>
+      </div>
+    </div>
+    <div class="absolute top-3 right-3 flex gap-1">
+      <UButton
+        v-if="!editing"
+        icon="i-lucide-pencil"
+        color="neutral"
+        variant="ghost"
+        size="xs"
+        title="Edit name"
+        @click.prevent="startEdit"
+      />
+      <UButton
+        icon="i-lucide-trash-2"
+        color="error"
+        variant="ghost"
+        size="xs"
+        title="Delete playlist"
+        @click.prevent="$emit('delete', playlist.id)"
+      />
+    </div>
   </UCard>
 </template>
 
 <script setup>
-defineProps({
+const props = defineProps({
   playlist: {
     type: Object,
     required: true,
   },
 })
 
-defineEmits(['delete'])
+const emit = defineEmits(['delete', 'updated'])
+
+const editing = ref(false)
+const editName = ref('')
+const saving = ref(false)
+const nameInput = ref(null)
+
+function startEdit() {
+  editName.value = props.playlist.name
+  editing.value = true
+  nextTick(() => {
+    nameInput.value?.$el?.querySelector('input')?.focus()
+  })
+}
+
+function cancelEdit() {
+  editing.value = false
+  editName.value = ''
+}
+
+async function saveEdit() {
+  if (!editName.value.trim() || editName.value.trim() === props.playlist.name) {
+    cancelEdit()
+    return
+  }
+
+  saving.value = true
+  try {
+    await $fetch(`/api/playlists/${props.playlist.id}`, {
+      method: 'PATCH',
+      body: { name: editName.value.trim() },
+    })
+    emit('updated')
+    editing.value = false
+  }
+  catch (e) {
+    console.error('Failed to update playlist:', e)
+  }
+  saving.value = false
+}
 
 function formatDate(dateStr) {
   if (!dateStr) return ''

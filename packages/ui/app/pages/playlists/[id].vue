@@ -25,7 +25,27 @@
             >
               Back to playlists
             </UButton>
-            <h2 class="text-2xl font-bold mb-2">{{ playlist.name }}</h2>
+            <div v-if="!editingTitle" class="flex items-center gap-2 mb-2">
+              <h2
+                class="text-2xl font-bold cursor-pointer hover:text-primary transition-colors"
+                title="Click to edit"
+                @click="startTitleEdit"
+              >
+                {{ playlist.name }}
+              </h2>
+              <UIcon name="i-lucide-pencil" class="size-4 text-muted" />
+            </div>
+            <div v-else class="flex items-center gap-2 mb-2">
+              <UInput
+                ref="titleInput"
+                v-model="editTitleValue"
+                class="text-2xl font-bold w-64"
+                @keyup.enter="saveTitleEdit"
+                @keyup.escape="cancelTitleEdit"
+              />
+              <UButton size="xs" :loading="savingTitle" @click="saveTitleEdit">Save</UButton>
+              <UButton size="xs" color="neutral" variant="ghost" :disabled="savingTitle" @click="cancelTitleEdit">Cancel</UButton>
+            </div>
             <div class="text-muted text-sm flex items-center gap-2 flex-wrap">
               <UBadge color="neutral" variant="subtle">{{ playlist.track_count }} tracks</UBadge>
               <UButton
@@ -134,6 +154,12 @@ const error = ref('')
 const currentTrack = ref(null)
 const prepTrackIds = ref(new Set())
 
+// Title editing state
+const editingTitle = ref(false)
+const editTitleValue = ref('')
+const savingTitle = ref(false)
+const titleInput = ref(null)
+
 const { data: playlist, pending, error: fetchError, refresh } = await useFetch(
   () => `/api/playlists/${playlistId.value}`,
   { default: () => null },
@@ -206,5 +232,39 @@ function handleTogglePlay(track) {
 
 function stopPlayback() {
   currentTrack.value = null
+}
+
+function startTitleEdit() {
+  editTitleValue.value = playlist.value.name
+  editingTitle.value = true
+  nextTick(() => {
+    titleInput.value?.$el?.querySelector('input')?.focus()
+  })
+}
+
+function cancelTitleEdit() {
+  editingTitle.value = false
+  editTitleValue.value = ''
+}
+
+async function saveTitleEdit() {
+  if (!editTitleValue.value.trim() || editTitleValue.value.trim() === playlist.value.name) {
+    cancelTitleEdit()
+    return
+  }
+
+  savingTitle.value = true
+  try {
+    await $fetch(`/api/playlists/${playlistId.value}`, {
+      method: 'PATCH',
+      body: { name: editTitleValue.value.trim() },
+    })
+    await refresh()
+    editingTitle.value = false
+  }
+  catch (e) {
+    error.value = e.data?.message || 'Failed to update playlist name'
+  }
+  savingTitle.value = false
 }
 </script>
