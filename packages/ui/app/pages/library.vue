@@ -138,9 +138,6 @@
       <div class="flex items-center justify-between gap-4 flex-wrap">
         <span class="text-sm">{{ selectedTracks.size }} track(s) selected</span>
         <div class="flex gap-2">
-          <UButton v-if="singleSelectedTrack" size="sm" color="warning" variant="soft" @click="openMusicBrainzModal(singleSelectedTrack)">
-            Link to MusicBrainz
-          </UButton>
           <UButton size="sm" color="neutral" variant="soft" :loading="analyzing" @click="reanalyzeSelected">
             Re-analyze
           </UButton>
@@ -208,6 +205,7 @@
             @toggle-select="toggleTrackSelect"
             @update:select-all="toggleSelectAllLibrary"
             @edit="openEditModal"
+            @link-musicbrainz="openMusicBrainzModal"
           />
         </div>
 
@@ -242,6 +240,7 @@
         @toggle-select="toggleTrackSelect"
         @update:select-all="toggleSelectAllLibrary"
         @edit="openEditModal"
+        @link-musicbrainz="openMusicBrainzModal"
       />
     </template>
 
@@ -742,11 +741,6 @@ async function linkToMusicBrainz() {
   }
   linkingInProgress.value = false
 }
-
-const singleSelectedTrack = computed(() => {
-  if (selectedTracks.value.size !== 1) return null
-  return tracks.value.find(t => t.id === Array.from(selectedTracks.value)[0])
-})
 
 function openEditModal(track) {
   editingTrack.value = track
