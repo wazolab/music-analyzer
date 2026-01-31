@@ -145,9 +145,8 @@ Configure in your `.env` file:
 SLSKD_USERNAME=your-username
 SLSKD_PASSWORD=your-password
 
-# Custom directories (optional, defaults to ./downloads and ./music)
+# Custom directories (optional, defaults to ./downloads)
 DOWNLOADS_DIR=/path/to/downloads
-MUSIC_DIR=/path/to/music
 
 # User/Group IDs for file permissions (run: id -u && id -g)
 UID=1000
