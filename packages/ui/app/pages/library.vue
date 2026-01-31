@@ -389,45 +389,45 @@ const router = useRouter()
 const viewMode = computed({
   get: () => {
     const v = route.query.view
-    return ['genre', 'label', 'year', 'list'].includes(v) ? v : 'genre'
+    return ['list', 'genre', 'label', 'year'].includes(v) ? v : 'list'
   },
   set: (value) => {
-    router.replace({ query: { ...route.query, view: value, group: undefined } })
+    router.push({ query: { ...route.query, view: value, group: undefined } })
   },
 })
 
 const selectedGroup = computed({
   get: () => route.query.group || null,
   set: (value) => {
-    router.replace({ query: { ...route.query, group: value || undefined } })
+    router.push({ query: { ...route.query, group: value || undefined } })
   },
 })
 
 const filterGenre = computed({
   get: () => route.query.genre || '',
   set: (value) => {
-    router.replace({ query: { ...route.query, genre: value || undefined } })
+    router.push({ query: { ...route.query, genre: value || undefined } })
   },
 })
 
 const filterLabel = computed({
   get: () => route.query.label || '',
   set: (value) => {
-    router.replace({ query: { ...route.query, label: value || undefined } })
+    router.push({ query: { ...route.query, label: value || undefined } })
   },
 })
 
 const filterYear = computed({
   get: () => route.query.year || '',
   set: (value) => {
-    router.replace({ query: { ...route.query, year: value || undefined } })
+    router.push({ query: { ...route.query, year: value || undefined } })
   },
 })
 
 const filterStatus = computed({
   get: () => route.query.status || '',
   set: (value) => {
-    router.replace({ query: { ...route.query, status: value || undefined } })
+    router.push({ query: { ...route.query, status: value || undefined } })
   },
 })
 
@@ -435,10 +435,10 @@ const searchQuery = ref('')
 const filterNotInAcoustid = ref(false)
 
 const viewTabs = [
+  { label: 'List', value: 'list' },
   { label: 'By Genre', value: 'genre' },
   { label: 'By Label', value: 'label' },
   { label: 'By Year', value: 'year' },
-  { label: 'List', value: 'list' },
 ]
 
 const selectedGroupTracks = computed(() => {

@@ -78,7 +78,7 @@ const { data: playlists, pending, refresh } = await useFetch('/api/playlists', {
 const activeTab = computed({
   get: () => route.query.source === 'youtube' ? 'youtube' : 'soundcloud',
   set: (value) => {
-    router.replace({ query: { ...route.query, source: value } })
+    router.push({ query: { ...route.query, source: value } })
   },
 })
 
