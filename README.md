@@ -1,553 +1,434 @@
-# Music Analyzer
+# Music Analyzer - Technical Specification
 
-A Node.js/TypeScript CLI application that analyzes FLAC files, extracts audio features (Key, BPM, Energy, Genre), looks up metadata via MusicBrainz, writes results to FLAC tags, and organizes files into a structured folder hierarchy.
+## System Overview
 
-## Features
+Music Analyzer is a modular audio analysis and music library management system built on Node.js/TypeScript. It provides automated audio feature extraction, metadata enrichment, and file organization through both CLI and web interfaces.
 
-- **Audio Analysis** (powered by Essentia.js)
-  - BPM / Tempo detection
-  - Musical key detection with Camelot notation (for DJ mixing)
-  - Energy level calculation
-  - Genre classification using TensorFlow.js (400 Discogs genres)
-  - BPM/key-based heuristics to refine electronic subgenre detection
-  - Beat grid / downbeat positions
+## Architecture
 
-- **Metadata Lookup** (multiple sources)
-  - **MusicBrainz**: AcoustID fingerprinting + API
-  - **Discogs**: Artist, label, year (API fallback)
-  - **Bandcamp**: Artist, album, label, year (web scraping)
-
-- **Tag Writing**
-  - Writes analysis results to FLAC Vorbis comments
-  - Preserves existing tags and cover art
-
-- **File Organization**
-  - Copies files to `output/by-year/YYYY/`
-  - Copies files to `output/by-genre/Genre/`
-  - Copies files to `output/by-label/Label/`
-  - Standardized output filenames: `Artist - Title.flac`
-  - Label extraction from filename patterns (see below)
-
-- **Performance Optimizations**
-  - Parallel file processing with configurable concurrency
-  - Worker threads for CPU-intensive audio analysis
-  - Parallel metadata lookups (all sources queried simultaneously)
-
-## Installation
-
-### Prerequisites
-
-- Node.js 22+
-- ffmpeg (for audio decoding)
-- fpcalc (for AcoustID fingerprinting)
-
-```bash
-# Install system dependencies (Ubuntu/Debian)
-sudo apt install ffmpeg libchromaprint-tools
-
-# Install Node.js dependencies
-cd ~/Documents/sources/music-analyzer
-npm install
-
-# Build the project
-npm run build
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              Docker Compose                                  │
+├─────────────────┬─────────────────┬─────────────────┬───────────────────────┤
+│   UI Service    │  Analyzer Svc   │   slskd Svc     │   Shared Volumes      │
+│   (Nuxt 3)      │  (Node.js CLI)  │   (Soulseek)    │                       │
+│   Port 3000     │   On-demand     │   Port 5030     │   - downloads/        │
+│                 │                 │                 │   - music/            │
+│   ┌──────────┐  │   ┌──────────┐  │   ┌──────────┐  │   - ui-data (SQLite)  │
+│   │ Nitro    │  │   │ Pipeline │  │   │ P2P Net  │  │                       │
+│   │ Server   │  │   │ Worker   │  │   │ Client   │  │                       │
+│   └────┬─────┘  │   └────┬─────┘  │   └──────────┘  │                       │
+│        │        │        │        │                 │                       │
+│   ┌────┴─────┐  │   ┌────┴─────┐  │                 │                       │
+│   │ SQLite   │  │   │ Essentia │  │                 │                       │
+│   │ Database │  │   │ + TFJS   │  │                 │                       │
+│   └──────────┘  │   └──────────┘  │                 │                       │
+└─────────────────┴─────────────────┴─────────────────┴───────────────────────┘
 ```
 
-## Docker
+## Component Specifications
 
-The project includes a Docker Compose setup with a web UI and Soulseek daemon for downloading music.
+### 1. Analyzer Package (`packages/analyzer/`)
 
-### Quick Start (New Users)
+Core audio analysis engine built with:
 
-**Option 1: Using the setup script (recommended)**
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| Audio Decoder | FFmpeg (subprocess) | FLAC → PCM conversion |
+| Feature Extraction | Essentia.js (WASM) | BPM, key, energy analysis |
+| Genre Classification | TensorFlow.js + MusiCNN | 400-category Discogs taxonomy |
+| Fingerprinting | Chromaprint (fpcalc) | AcoustID generation |
+| Tag I/O | music-metadata + flac-tagger | Vorbis comment read/write |
 
-```bash
-# Clone and run setup
-git clone https://github.com/your-username/music-analyzer.git
-cd music-analyzer
-./setup.sh
+#### Module Structure
 
-# Start services
-docker compose up -d
+```
+packages/analyzer/src/
+├── index.ts                 # CLI entry (Commander.js)
+├── pipeline.ts              # Orchestration layer
+├── types.ts                 # Shared type definitions
+├── utils.ts                 # Helpers, logging, formatting
+├── analyzers/
+│   ├── audio.ts             # Essentia.js wrapper
+│   ├── beatgrid.ts          # Beat/downbeat detection
+│   ├── fingerprint.ts       # AcoustID via fpcalc
+│   ├── genre.ts             # TensorFlow MusiCNN inference
+│   ├── genre-heuristics.ts  # BPM/key-based refinement
+│   └── tagger.py            # Python-based genre tagging
+├── metadata/
+│   ├── reader.ts            # FLAC tag extraction
+│   ├── writer.ts            # FLAC tag writing
+│   ├── lookup.ts            # Multi-source lookup orchestrator
+│   ├── bandcamp.ts          # Bandcamp web scraper
+│   ├── beatport.ts          # Beatport API client
+│   └── musicbrainz.ts       # MusicBrainz/AcoustID client
+├── workers/
+│   ├── audio-worker.ts      # Worker thread for CPU tasks
+│   └── pool.ts              # Worker pool management
+└── organizer/
+    └── copy.ts              # File organization logic
 ```
 
-**Option 2: Manual setup**
+#### Audio Analysis Pipeline
 
-```bash
-# 1. Clone the repository
-git clone https://github.com/your-username/music-analyzer.git
-cd music-analyzer
-
-# 2. Copy the example environment file
-cp .env.example .env
-
-# 3. (Optional) Edit .env with your Soulseek credentials for auto-login
-# SLSKD_USERNAME=your-username
-# SLSKD_PASSWORD=your-password
-
-# 4. Create required directories
-mkdir -p downloads incomplete music
-
-# 5. Build the analyzer image (REQUIRED - the UI needs this to run analysis)
-docker compose build analyzer
-
-# 6. Start all services
-docker compose up -d
-
-# 7. Access the UI at http://localhost:3000
-# 8. Access Soulseek at http://localhost:5030
+```
+Input: FLAC file
+       │
+       ▼
+┌──────────────────────────────────────────────────────────────┐
+│ 1. Audio Decoding                                            │
+│    ffmpeg -i input.flac -f f32le -acodec pcm_f32le -         │
+│    Output: Float32 PCM @ original sample rate                │
+└──────────────────────────────────────────────────────────────┘
+       │
+       ▼
+┌──────────────────────────────────────────────────────────────┐
+│ 2. Feature Extraction (Essentia.js)                          │
+│    - KeyExtractor: Krumhansl/Temperley profiles              │
+│    - RhythmExtractor2013: Multi-feature tempo estimation     │
+│    - EBU R128 Loudness: Integrated loudness (LUFS)           │
+│    - Energy: RMS-based energy calculation                    │
+└──────────────────────────────────────────────────────────────┘
+       │
+       ▼
+┌──────────────────────────────────────────────────────────────┐
+│ 3. Genre Classification (TensorFlow.js)                      │
+│    - Mel-spectrogram: 96 bands, 256 hop length               │
+│    - Model: MusiCNN (auto-downloaded, ~50MB)                 │
+│    - Output: 400 Discogs categories with confidence scores   │
+└──────────────────────────────────────────────────────────────┘
+       │
+       ▼
+┌──────────────────────────────────────────────────────────────┐
+│ 4. Heuristic Refinement                                      │
+│    - BPM range matching for electronic subgenres             │
+│    - Key-based boosting (minor keys → Trance/Psy-Trance)     │
+│    - Generic genre demotion when specific match exists       │
+└──────────────────────────────────────────────────────────────┘
+       │
+       ▼
+Output: AnalysisResult {
+  bpm: number,
+  key: string,           // "A minor"
+  camelot: string,       // "8A"
+  energy: number,        // 0-100
+  genres: string[],      // ["House", "Tech House"]
+  confidence: number
+}
 ```
 
-### Updating
+#### Metadata Lookup Chain
 
-```bash
-# Pull latest changes
-git pull
-
-# Rebuild images with new code
-docker compose build
-
-# Restart services
-docker compose up -d
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Parallel Lookup                           │
+├──────────────────┬──────────────────┬───────────────────────┤
+│   MusicBrainz    │     Discogs      │      Bandcamp         │
+│   (AcoustID)     │     (API)        │    (Web Scrape)       │
+│                  │                  │                       │
+│   Fingerprint    │   Artist/Title   │   URL from tags       │
+│   → Recording    │   search         │   or search           │
+│   → Release      │   → Release      │   → Page parse        │
+└────────┬─────────┴────────┬─────────┴───────────┬───────────┘
+         │                  │                     │
+         ▼                  ▼                     ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     Result Merger                            │
+│   Priority: MusicBrainz > Discogs > Bandcamp > Existing     │
+│   Fields: artist, title, album, year, label, genre          │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Common Commands
+### 2. UI Package (`packages/ui/`)
 
-```bash
-# View logs
-docker compose logs -f
+Web interface built with Nuxt 3:
 
-# Stop all services
-docker compose down
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| Framework | Nuxt 3 | SSR/SPA hybrid |
+| UI Components | Nuxt UI | Component library |
+| State | Pinia | Reactive stores |
+| Database | SQLite (better-sqlite3) | Persistent storage |
+| API | Nitro server routes | REST endpoints |
+
+#### Database Schema
+
+```sql
+-- Core entities
+CREATE TABLE library_tracks (
+  id INTEGER PRIMARY KEY,
+  path TEXT UNIQUE NOT NULL,
+  filename TEXT NOT NULL,
+  artist TEXT,
+  title TEXT,
+  album TEXT,
+  year INTEGER,
+  label TEXT,
+  genre TEXT,
+  bpm REAL,
+  key TEXT,
+  camelot TEXT,
+  energy INTEGER,
+  duration REAL,
+  fingerprint TEXT,
+  analyzed_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE playlists (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME
+);
+
+CREATE TABLE playlist_tracks (
+  id INTEGER PRIMARY KEY,
+  playlist_id INTEGER REFERENCES playlists(id) ON DELETE CASCADE,
+  track_id INTEGER REFERENCES library_tracks(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL,
+  UNIQUE(playlist_id, track_id)
+);
+
+CREATE TABLE download_files (
+  id INTEGER PRIMARY KEY,
+  filename TEXT NOT NULL,
+  path TEXT NOT NULL,
+  status TEXT DEFAULT 'pending',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE analysis_jobs (
+  id INTEGER PRIMARY KEY,
+  track_id INTEGER REFERENCES library_tracks(id),
+  status TEXT DEFAULT 'pending',
+  error TEXT,
+  started_at DATETIME,
+  completed_at DATETIME
+);
+
+CREATE TABLE preparation_list (
+  id INTEGER PRIMARY KEY,
+  track_id INTEGER UNIQUE REFERENCES library_tracks(id) ON DELETE CASCADE,
+  added_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
-### Prerequisites
+#### API Endpoints
 
-- **Docker** and **Docker Compose** (v2.0+)
-- **Linux** (tested on Ubuntu 22.04+) - macOS may work but external drive detection is Linux-specific
-- At least **4GB RAM** for audio analysis
-- External SSD/drive mounted at `/media/*` for analysis output (optional)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/tracks` | List library tracks with filtering |
+| GET | `/api/tracks/:id` | Get single track details |
+| PATCH | `/api/tracks/:id` | Update track metadata |
+| DELETE | `/api/tracks/:id` | Remove track from library |
+| POST | `/api/tracks/:id/analyze` | Trigger re-analysis |
+| PATCH | `/api/tracks/:id/in-library` | Toggle library status |
+| GET | `/api/playlists` | List all playlists |
+| POST | `/api/playlists` | Create playlist |
+| GET | `/api/playlists/:id` | Get playlist with tracks |
+| PATCH | `/api/playlists/:id` | Update playlist |
+| DELETE | `/api/playlists/:id` | Delete playlist |
+| POST | `/api/playlists/:id/tracks` | Add track to playlist |
+| DELETE | `/api/playlists/:id/tracks/:trackId` | Remove track |
+| POST | `/api/publish` | Publish to external drive |
+| GET | `/api/drives` | List mounted external drives |
+| GET | `/api/downloads` | List downloaded files |
+| POST | `/api/analysis/batch` | Start batch analysis job |
+| GET | `/api/analysis/status` | Get analysis job status |
 
-### Services
+### 3. slskd Integration
 
-| Service | Port | Description |
-|---------|------|-------------|
-| `ui` | 3000 | Web UI for managing playlists and audio analysis |
-| `slskd` | 5030, 5031 | Soulseek daemon for P2P music downloads |
-| `analyzer` | - | Audio analyzer (runs on-demand, not always running) |
+Soulseek daemon for P2P music acquisition:
+
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| 5030 | HTTP | Web UI |
+| 5031 | HTTP | API |
+| 2234 | TCP | Soulseek P2P |
+
+Files downloaded to `./downloads/` are auto-detected by the UI for import.
+
+## Data Flow
+
+### Track Import Flow
+
+```
+External Drive / Downloads Folder
+              │
+              ▼
+┌──────────────────────────────────┐
+│      File Watcher / Scan         │
+│   Detect new FLAC files          │
+└──────────────────────────────────┘
+              │
+              ▼
+┌──────────────────────────────────┐
+│      Metadata Reader             │
+│   Extract existing tags          │
+└──────────────────────────────────┘
+              │
+              ▼
+┌──────────────────────────────────┐
+│      Database Insert             │
+│   library_tracks entry           │
+└──────────────────────────────────┘
+              │
+              ▼
+┌──────────────────────────────────┐
+│      Analysis Queue              │
+│   analysis_jobs entry            │
+└──────────────────────────────────┘
+              │
+              ▼
+┌──────────────────────────────────┐
+│      Analyzer Container          │
+│   Audio analysis + lookup        │
+└──────────────────────────────────┘
+              │
+              ▼
+┌──────────────────────────────────┐
+│      Tag Writer                  │
+│   Write results to FLAC          │
+└──────────────────────────────────┘
+              │
+              ▼
+┌──────────────────────────────────┐
+│      Database Update             │
+│   Update library_tracks          │
+└──────────────────────────────────┘
+```
+
+### Publish Flow
+
+```
+Playlist Selection + External Drive
+              │
+              ▼
+┌──────────────────────────────────┐
+│      Permission Check            │
+│   Verify drive is writable       │
+└──────────────────────────────────┘
+              │
+              ▼
+┌──────────────────────────────────┐
+│      File Copy                   │
+│   FLAC files to drive root       │
+│   Flat structure for exFAT       │
+└──────────────────────────────────┘
+              │
+              ▼
+┌──────────────────────────────────┐
+│      M3U Generation              │
+│   by-genre/*.m3u                 │
+│   by-year/*.m3u                  │
+│   by-label/*.m3u                 │
+└──────────────────────────────────┘
+```
+
+## Configuration
 
 ### Environment Variables
 
-Configure in your `.env` file:
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `ACOUSTID_API_KEY` | No | - | AcoustID fingerprint lookup |
+| `DISCOGS_TOKEN` | No | - | Discogs API fallback |
+| `SLSKD_USERNAME` | No | - | Soulseek auto-login |
+| `SLSKD_PASSWORD` | No | - | Soulseek auto-login |
+| `DOWNLOADS_DIR` | No | `./downloads` | Download directory path |
+| `UID` | No | `1000` | Container user ID |
+| `GID` | No | `1000` | Container group ID |
+| `DOCKER_GID` | No | `999` | Docker socket group ID |
+
+### CLI Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-o, --output <dir>` | `./output` | Output directory |
+| `-c, --concurrency <n>` | `4` | Parallel file processing |
+| `-w, --workers` | `false` | Enable worker threads |
+| `--dry-run` | `false` | Preview without writing |
+| `--skip-lookup` | `false` | Skip metadata lookup |
+| `--skip-analysis` | `false` | Skip audio analysis |
+
+## Technical Requirements
+
+### Runtime Dependencies
+
+| Dependency | Version | Purpose |
+|------------|---------|---------|
+| Node.js | 22+ | Runtime |
+| FFmpeg | 4.4+ | Audio decoding |
+| fpcalc | 1.5+ | Chromaprint fingerprinting |
+| Docker | 24+ | Container runtime |
+| Docker Compose | 2.0+ | Multi-container orchestration |
+
+### System Requirements
+
+| Resource | Minimum | Recommended |
+|----------|---------|-------------|
+| RAM | 4GB | 8GB+ |
+| CPU | 4 cores | 8+ cores |
+| Storage | 10GB | 50GB+ (for music library) |
+| OS | Linux (Ubuntu 22.04+) | Linux |
+
+### FLAC Tag Mapping
+
+| Internal Field | Vorbis Comment | Notes |
+|----------------|----------------|-------|
+| bpm | `BPM` | Integer, rounded |
+| key | `INITIALKEY` | Full name ("A minor") |
+| camelot | `KEY` | Camelot notation ("8A") |
+| energy | `ENERGY` | 0-100 scale |
+| genre | `GENRE` | Primary genre only |
+| mbid | `MUSICBRAINZ_TRACKID` | MusicBrainz Recording ID |
+
+## Performance Characteristics
+
+### Analysis Throughput
+
+| Mode | Throughput | Memory | CPU |
+|------|------------|--------|-----|
+| Sequential | ~1 file/10s | 1GB | 1 core |
+| `-c 4` | ~4 files/10s | 2GB | 4 cores |
+| `-c 4 -w` | ~6 files/10s | 3GB | 4 cores |
+| `-c 8 -w` | ~10 files/10s | 4GB | 8 cores |
+
+### Model Loading
+
+| Model | Size | Load Time | Memory |
+|-------|------|-----------|--------|
+| MusiCNN | 50MB | 2-3s | 200MB |
+| Essentia WASM | 8MB | 0.5s | 50MB |
+
+## Development
+
+### Build Commands
 
 ```bash
-# Soulseek credentials (auto-connects on startup)
-SLSKD_USERNAME=your-username
-SLSKD_PASSWORD=your-password
+# Install dependencies
+npm install
 
-# Custom directories (optional, defaults to ./downloads)
-DOWNLOADS_DIR=/path/to/downloads
+# Build analyzer
+npm run build -w packages/analyzer
 
-# User/Group IDs for file permissions (run: id -u && id -g)
-UID=1000
-GID=1000
+# Build UI
+npm run build -w packages/ui
 
-# Docker group ID for socket access (run: getent group docker | cut -d: -f3)
-DOCKER_GID=999
-```
-
-Then start the services:
-
-```bash
-docker compose up -d
-```
-
-### Development Mode (HMR)
-
-For development with hot module replacement:
-
-```bash
+# Development mode (with HMR)
 docker compose -f docker-compose.dev.yml up
 ```
 
-This mounts your source code and enables live reloading. Changes to Vue files will instantly reflect in the browser.
-
-### Useful Commands
+### Testing
 
 ```bash
-# Rebuild after code changes
-docker compose build
-
-# Restart a specific service
-docker compose restart ui
-
-# View slskd logs only
-docker compose logs -f slskd
-
-# Remove volumes (warning: deletes all data)
-docker compose down -v
-```
-
-### API Keys (Optional)
-
-Copy the example environment file and configure as needed:
-
-```bash
-cp .env.example .env
-```
-
-**AcoustID** (for MusicBrainz fingerprint lookup):
-1. Register at https://acoustid.org/
-2. Create an application at https://acoustid.org/new-application
-3. Add `ACOUSTID_API_KEY` to `.env`
-
-**Discogs** (optional - fallback for niche tracks):
-1. Go to https://www.discogs.com/settings/developers
-2. Generate a personal access token
-3. Add `DISCOGS_TOKEN` to `.env`
-
-**Bandcamp**: No API key needed (uses web scraping)
-
-## Usage
-
-```bash
-# Analyze and organize FLAC files
-node dist/index.js analyze <input-folder> -o <output-folder>
-
-# Examples
-node dist/index.js analyze ~/Music -o ~/Music/organized
-node dist/index.js analyze ./downloads --dry-run
-node dist/index.js analyze ./music --skip-lookup
-node dist/index.js analyze ./music -c 8        # Use 8 parallel file processing
-node dist/index.js analyze ./music -c 8 -w     # 8 parallel + worker threads (fastest)
-
-# Check system status
-node dist/index.js status
-```
-
-### Options
-
-| Option | Description |
-|--------|-------------|
-| `-o, --output <dir>` | Output directory (default: `./output`) |
-| `-c, --concurrency <n>` | Number of files to process in parallel (default: `4`) |
-| `-w, --workers` | Use worker threads for CPU-intensive analysis |
-| `--dry-run` | Preview what would be done without copying files |
-| `--skip-lookup` | Skip MusicBrainz lookup, use existing tags only |
-| `--skip-analysis` | Skip audio analysis, only organize by existing tags |
-
-## Output
-
-### FLAC Tags Written
-
-| Tag | Description | Example |
-|-----|-------------|---------|
-| `BPM` | Detected tempo | `128` |
-| `INITIALKEY` | Musical key | `A minor` |
-| `KEY` | Camelot notation | `8A` |
-| `ENERGY` | Energy level (0-100) | `85` |
-| `GENRE` | Detected genre | `Electronic - House` |
-| `MUSICBRAINZ_TRACKID` | MusicBrainz Recording ID | `abc-123-...` |
-
-### Folder Structure
-
-When publishing to external drives, files are stored flat at the root with M3U playlists for organization. This approach works on all filesystems including exFAT (which doesn't support symlinks):
-
-```
-dj-library/
-├── Artist - Title.flac
-├── Artist2 - Title2.flac
-├── by-genre/
-│   ├── House.m3u
-│   ├── Techno.m3u
-│   └── Trance.m3u
-├── by-label/
-│   ├── Drumcode.m3u
-│   └── Kompakt.m3u
-└── by-year/
-    ├── 2023.m3u
-    └── 2024.m3u
-```
-
-The M3U playlists contain relative paths to the FLAC files and can be imported into Rekordbox, Traktor, or any DJ software that supports M3U playlists.
-
-## How It Works
-
-```
-Input Folder (FLAC files)
-         │
-         ▼
-┌─────────────────────────────────────┐
-│       PARALLEL FILE PROCESSING      │
-│  (configurable concurrency: -c N)   │
-└─────────────────────────────────────┘
-         │
-    ┌────┴────┬────────┬────────┐
-    ▼         ▼        ▼        ▼      (N files processed concurrently)
-┌─────────────────────────────────────┐
-│ 1. AUDIO ANALYSIS (Essentia.js)    │
-│    • Decode FLAC to raw audio      │
-│    • Extract key, BPM, energy      │
-│    • Classify genre (TensorFlow)   │
-│    • Optional: worker threads (-w) │
-└─────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────┐
-│ 2. METADATA LOOKUP (parallel)      │
-│    • MusicBrainz─┐                 │
-│    • Discogs   ──┼─► First match   │
-│    • Bandcamp  ──┘                 │
-└─────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────┐
-│ 3. TAG WRITING                     │
-│    • Write analysis to FLAC tags   │
-│    • Preserve existing tags        │
-└─────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────┐
-│ 4. FILE ORGANIZATION               │
-│    • Copy to by-year/              │
-│    • Copy to by-genre/             │
-│    • Copy to by-label/             │
-└─────────────────────────────────────┘
-```
-
-## Tech Stack
-
-| Component | Technology |
-|-----------|------------|
-| Language | TypeScript |
-| Runtime | Node.js 22+ |
-| Audio Analysis | Essentia.js (WASM) |
-| Genre Classification | TensorFlow.js (MusiCNN model) |
-| Fingerprinting | fpcalc (Chromaprint) |
-| Metadata API | AcoustID + MusicBrainz + Discogs + Bandcamp |
-| FLAC Tags | music-metadata + flac-tagger |
-| CLI | Commander.js |
-| Parallelism | p-limit + Node.js worker_threads |
-
-## Genre Classification
-
-The genre classifier uses the MusiCNN model trained on the Discogs dataset with 400 genre/style categories. It analyzes mel-spectrogram features extracted from the audio.
-
-### Genre Priority
-
-Genres are determined in priority order:
-
-1. **Metadata lookup** (MusicBrainz, Discogs, Bandcamp) - Most reliable for electronic music
-2. **ML + heuristics** - TensorFlow model refined with BPM/key heuristics
-3. **Existing FLAC tags** - Fallback to tags already in the file
-
-### BPM/Key Heuristics
-
-The analyzer applies genre-specific heuristics to improve classification accuracy for electronic music:
-
-| Genre | BPM Range | Notes |
-|-------|-----------|-------|
-| Trance | 138-150 | Boosted for minor keys |
-| Psy-Trance | 140-150 | Boosted for minor keys |
-| House | 118-132 | |
-| Deep House | 118-128 | |
-| Tech House | 124-132 | |
-| Techno | 125-145 | |
-| Hard Techno | 140-160 | |
-| Drum & Bass | 160-180 | |
-| Dubstep | 138-145 | |
-| Ambient | 60-100 | |
-
-Overly generic genres (like "Rock Country Rock") are demoted when a more specific electronic genre matches the BPM/key profile.
-
-### Specific Genre Extraction
-
-The analyzer extracts specific subgenres from broad categories:
-
-| Raw Classification | Output Genre |
-|-------------------|--------------|
-| Electronic - House | House |
-| Electronic - Hard Trance | Hard Trance |
-| Electronic - Drum n Bass | Drum n Bass |
-| Rock - Alternative Rock | Alternative Rock |
-
-Generic parent genres ("Electronic", "Rock", "Pop") are filtered out when specific subgenres are available.
-
-### Supported Categories
-
-- Electronic (House, Techno, Ambient, Experimental, etc.)
-- Rock, Pop, Hip Hop, Jazz, Classical
-- And many more from the Discogs taxonomy
-
-The model is automatically downloaded on first run (~50MB).
-
-## Label Extraction
-
-Labels are extracted using multiple methods in priority order:
-
-1. **Metadata lookup** - From MusicBrainz, Discogs, or Bandcamp
-2. **Filename parsing** - Supports common naming patterns
-3. **Existing FLAC tags** - From the `LABEL` or `ORGANIZATION` tag
-
-### Supported Filename Patterns
-
-| Pattern | Example | Extracted Label |
-|---------|---------|-----------------|
-| `Artist - Title [Label]` | `Artist - Track Name [Anjunadeep]` | Anjunadeep |
-| `Artist - Title (Label)` | `Artist - Track Name (Drumcode)` | Drumcode |
-| `Label - Artist - Title` | `Anatta Records - Asca - By Proxy` | Anatta Records |
-
-The label detector also recognizes common keywords like "Records", "Recordings", "Music", "Digital", etc.
-
-## Camelot Key Notation
-
-The analyzer outputs musical keys in Camelot notation for DJ mixing compatibility:
-
-| Key | Camelot | Key | Camelot |
-|-----|---------|-----|---------|
-| C major | 8B | C minor | 5A |
-| G major | 9B | G minor | 6A |
-| D major | 10B | D minor | 7A |
-| A major | 11B | A minor | 8A |
-| E major | 12B | E minor | 9A |
-| B major | 1B | B minor | 10A |
-| F# major | 2B | F# minor | 11A |
-| Db major | 3B | Db minor | 12A |
-| Ab major | 4B | Ab minor | 1A |
-| Eb major | 5B | Eb minor | 2A |
-| Bb major | 6B | Bb minor | 3A |
-| F major | 7B | F minor | 4A |
-
-## Project Structure
-
-```
-music-analyzer/
-├── src/
-│   ├── index.ts              # CLI entry point
-│   ├── pipeline.ts           # Main orchestrator
-│   ├── types.ts              # Type definitions
-│   ├── utils.ts              # Helpers (incl. filename parsing)
-│   ├── analyzers/
-│   │   ├── audio.ts          # Essentia.js wrapper
-│   │   ├── beatgrid.ts       # Beat detection
-│   │   ├── fingerprint.ts    # AcoustID wrapper
-│   │   ├── genre.ts          # TensorFlow genre classifier
-│   │   └── genre-heuristics.ts # BPM/key-based genre refinement
-│   ├── metadata/
-│   │   ├── reader.ts         # Read FLAC tags
-│   │   ├── writer.ts         # Write FLAC tags
-│   │   ├── lookup.ts         # Unified metadata lookup
-│   │   ├── bandcamp.ts       # Bandcamp scraper
-│   │   └── musicbrainz.ts    # MusicBrainz API client
-│   ├── workers/
-│   │   ├── audio-worker.ts   # Worker thread for analysis
-│   │   └── pool.ts           # Worker pool manager
-│   └── organizer/
-│       └── copy.ts           # File organization
-├── models/                   # ML models (auto-downloaded)
-├── package.json
-├── tsconfig.json
-├── .env                      # API keys (not committed)
-└── .env.example
-```
-
-## Performance
-
-The pipeline supports parallel processing to speed up analysis of large music libraries.
-
-### Concurrency (`-c`)
-
-Controls how many files are processed simultaneously. Default is 4.
-
-```bash
-node dist/index.js analyze ./music -c 8   # Process 8 files at once
-```
-
-### Worker Threads (`-w`)
-
-Offloads CPU-intensive audio analysis (Essentia.js, TensorFlow.js) to separate threads, preventing blocking and enabling true parallel CPU utilization.
-
-```bash
-node dist/index.js analyze ./music -w     # Enable worker threads
-node dist/index.js analyze ./music -c 8 -w  # Combined for maximum speed
-```
-
-### Expected Speedup
-
-| Mode | Speedup | Best For |
-|------|---------|----------|
-| Default (`-c 4`) | ~3-4x | Most systems |
-| With workers (`-c 4 -w`) | ~4-6x | Multi-core CPUs |
-| Maximum (`-c 8 -w`) | ~6-8x | 8+ core CPUs, fast storage |
-
-**Note**: Higher concurrency uses more RAM. Reduce `-c` if you encounter memory issues.
-
-## Troubleshooting
-
-### Analysis fails or genre shows "unknown"
-
-```bash
-# Rebuild the analyzer image to get the latest model files
-docker compose build analyzer --no-cache
-```
-
-### External SSD not visible in the UI
-
-The UI looks for external drives mounted at `/media/*`. Make sure your drive is mounted:
-
-```bash
-# Check mounted drives
-ls /media/$USER/
-
-# The drive should appear in the UI dropdown
-```
-
-### Docker permission issues
-
-```bash
-# Add your user to the docker group
-sudo usermod -aG docker $USER
-# Log out and back in for changes to take effect
-```
-
-### Port already in use
-
-```bash
-# Check what's using port 3000
-sudo lsof -i :3000
-
-# Or change the port in docker-compose.yml
-ports:
-  - "3001:3000"  # Use port 3001 instead
-```
-
-### Database Management
-
-The database is stored in a Docker volume (`ui-data`), not on the local filesystem. Use the provided script to manage database contents:
-
-```bash
-# Show current table counts
-./scripts/clear-db.sh --stats
-
-# Clear specific tables
-./scripts/clear-db.sh --library      # Clear library_tracks only
-./scripts/clear-db.sh --downloads    # Clear download_files only
-./scripts/clear-db.sh --analysis     # Clear analysis_jobs only
-./scripts/clear-db.sh --playlists    # Clear playlists, tracks, preparation list
-
-# Clear all tables
-./scripts/clear-db.sh --all
-```
-
-### Resetting everything
-
-```bash
-# Stop containers and remove all data (including database volume)
-docker compose down -v
-
-# Start fresh
-docker compose up -d
+# Run analyzer tests
+npm test -w packages/analyzer
+
+# Run UI tests
+npm test -w packages/ui
 ```
 
 ## License

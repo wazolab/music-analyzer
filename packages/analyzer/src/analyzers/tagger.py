@@ -46,18 +46,9 @@ class AudioTagger:
         return " / ".join(result)
 
     @staticmethod
-    def _update_comment_with_energy(existing_comment: Optional[str], energy: int) -> str:
-        """Update comment field with energy value for Traktor visibility."""
-        import re
-
-        energy_str = f"Energy: {energy}"
-        if not existing_comment:
-            return energy_str
-        # Remove any existing energy marker and add new one
-        cleaned = re.sub(r"\s*Energy:\s*\d+\s*", "", existing_comment).strip()
-        if cleaned:
-            return f"{cleaned} | {energy_str}"
-        return energy_str
+    def _format_energy_comment(energy: int) -> str:
+        """Format energy value for COMMENT tag."""
+        return f"Energy: {energy}"
 
     def write(self, file_path: str, data: TagData) -> bool:
         """
@@ -118,9 +109,8 @@ class AudioTagger:
 
         if data.energy is not None:
             audio["ENERGY"] = str(data.energy)
-            # Also add to COMMENT for Traktor visibility
-            existing_comment = audio.get("COMMENT", [None])[0]
-            audio["COMMENT"] = self._update_comment_with_energy(existing_comment, data.energy)
+            # Replace COMMENT with energy for Traktor visibility
+            audio["COMMENT"] = self._format_energy_comment(data.energy)
 
         if data.genres:
             audio["GENRE"] = self._format_genres(data.genres)
@@ -174,15 +164,9 @@ class AudioTagger:
         if data.energy is not None:
             # Store as custom TXXX frame
             tags.add(TXXX(encoding=3, desc="ENERGY", text=[str(data.energy)]))
-            # Also add to COMM for Traktor visibility
-            existing_comment = None
-            for key in tags:
-                if key.startswith("COMM"):
-                    existing_comment = str(tags[key])
-                    break
-            new_comment = self._update_comment_with_energy(existing_comment, data.energy)
+            # Replace COMM with energy for Traktor visibility
             tags.delall("COMM")
-            tags.add(COMM(encoding=3, lang="eng", desc="", text=new_comment))
+            tags.add(COMM(encoding=3, lang="eng", desc="", text=self._format_energy_comment(data.energy)))
 
         if data.genres:
             tags.add(TCON(encoding=3, text=[self._format_genres(data.genres)]))
