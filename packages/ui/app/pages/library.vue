@@ -211,23 +211,19 @@
 
         <!-- Group Cards Grid -->
         <div v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-          <UPageCard
+          <UCard
             v-for="group in groupedTracks"
             :key="group.name"
-            :icon="viewMode === 'genre' ? 'i-lucide-music-2' : viewMode === 'label' ? 'i-lucide-disc-3' : 'i-lucide-calendar'"
-            :title="group.name || 'Unknown'"
             variant="subtle"
-            :ui="{
-              container: 'gap-y-1.5',
-              wrapper: 'items-start',
-              leading: 'p-2.5 rounded-full bg-primary/10 ring ring-inset ring-primary/25 flex-col',
-              title: 'font-normal text-muted text-xs uppercase truncate',
-            }"
+            :ui="{ body: 'p-4' }"
             class="cursor-pointer hover:z-1"
             @click="selectedGroup = group.name"
           >
-            <span class="text-2xl font-semibold text-highlighted">{{ group.tracks.length }}</span>
-          </UPageCard>
+            <div class="flex justify-between items-end">
+              <span class="font-normal text-muted text-sm uppercase truncate">{{ group.name || 'Unknown' }}</span>
+              <span class="text-2xl font-semibold text-highlighted">{{ group.tracks.length }}</span>
+            </div>
+          </UCard>
         </div>
       </template>
 
