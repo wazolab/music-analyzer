@@ -6,14 +6,17 @@ import {
   getLibraryTrackByFingerprint,
   upsertLibraryTrackFromScan,
 } from '../../utils/db'
+import { needsConversion, convertToFlac } from '../../utils/converter'
 import type { LibraryTrack, TrackSource } from '../../utils/types'
 
-const AUDIO_EXTENSIONS = ['.flac']
+// All supported audio formats (FLAC native + convertible formats)
+const AUDIO_EXTENSIONS = ['.flac', '.mp3', '.m4a', '.aac', '.wav', '.aiff', '.ogg', '.opus', '.wma']
 
 interface ScanResult {
   found: number
   matched: number
   new: number
+  converted: number
   needsAnalysis: number
   errors: string[]
   tracks: LibraryTrack[]
@@ -116,6 +119,7 @@ async function scanDirectory(
     found: 0,
     matched: 0,
     new: 0,
+    converted: 0,
     needsAnalysis: 0,
     errors: [],
     tracks: [],
@@ -157,27 +161,41 @@ async function scanDirectory(
   // Process each file
   for (const filePath of filesToProcess) {
     try {
+      let actualPath = filePath
+
+      // Convert non-FLAC files to FLAC first
+      if (needsConversion(filePath)) {
+        console.log(`[Library Scan] Converting to FLAC: ${basename(filePath)}`)
+        const conversionResult = await convertToFlac(filePath, true, true)
+        if (!conversionResult.success) {
+          result.errors.push(`Failed to convert ${basename(filePath)}: ${conversionResult.message}`)
+          continue
+        }
+        actualPath = conversionResult.path
+        result.converted++
+      }
+
       // First try to read fingerprint from FLAC tags (instant)
-      let { fingerprint, duration } = await readFingerprintFromFlac(filePath)
+      let { fingerprint, duration } = await readFingerprintFromFlac(actualPath)
       let wasGenerated = false
 
       // If not in tags, generate it (1-2 seconds)
       if (!fingerprint) {
-        console.log(`[Library Scan] Generating fingerprint for: ${basename(filePath)}`)
-        const generated = await generateFingerprint(filePath)
+        console.log(`[Library Scan] Generating fingerprint for: ${basename(actualPath)}`)
+        const generated = await generateFingerprint(actualPath)
         fingerprint = generated.fingerprint
         duration = generated.duration
         wasGenerated = true
       }
 
       if (!fingerprint || !duration) {
-        result.errors.push(`Could not get fingerprint for: ${filePath}`)
+        result.errors.push(`Could not get fingerprint for: ${actualPath}`)
         continue
       }
 
       // Write fingerprint to FLAC tags if we just generated it (for faster future scans)
       if (wasGenerated) {
-        await writeFingerprintToFlac(filePath, fingerprint, duration)
+        await writeFingerprintToFlac(actualPath, fingerprint, duration)
       }
 
       // Check if track exists in library
@@ -188,7 +206,7 @@ async function scanDirectory(
         const track = upsertLibraryTrackFromScan({
           fingerprint,
           fingerprint_duration: duration,
-          file_path: filePath,
+          file_path: actualPath,
           source,
           storage_device: storageDevice,
         })
@@ -201,18 +219,18 @@ async function scanDirectory(
           result.needsAnalysis++
         }
 
-        if (existing.file_path !== filePath) {
-          console.log(`[Library Scan] Updated path for: ${existing.artist || 'Unknown'} - ${existing.title || basename(filePath)}`)
+        if (existing.file_path !== actualPath) {
+          console.log(`[Library Scan] Updated path for: ${existing.artist || 'Unknown'} - ${existing.title || basename(actualPath)}`)
         }
       }
       else {
         // New track - add to library with pending analysis status
-        const stats = await stat(filePath)
+        const stats = await stat(actualPath)
 
         const track = upsertLibraryTrackFromScan({
           fingerprint,
           fingerprint_duration: duration,
-          file_path: filePath,
+          file_path: actualPath,
           file_size_bytes: stats.size,
           source,
           storage_device: storageDevice,
@@ -221,7 +239,7 @@ async function scanDirectory(
         result.new++
         result.needsAnalysis++
         result.tracks.push(track)
-        console.log(`[Library Scan] Added new track (pending analysis): ${basename(filePath)}`)
+        console.log(`[Library Scan] Added new track (pending analysis): ${basename(actualPath)}`)
       }
     }
     catch (e) {
@@ -255,7 +273,7 @@ export default defineEventHandler(async (event) => {
 
   const result = await scanDirectory(path, trackSource, storageDevice, recursive)
 
-  console.log(`[Library Scan] Complete: ${result.found} found, ${result.matched} matched, ${result.new} new, ${result.needsAnalysis} need analysis`)
+  console.log(`[Library Scan] Complete: ${result.found} found, ${result.converted} converted, ${result.matched} matched, ${result.new} new, ${result.needsAnalysis} need analysis`)
 
   return result
 })

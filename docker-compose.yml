@@ -59,6 +59,7 @@ services:
     volumes:
       - ${DOWNLOADS_DIR:-./downloads}:/input:rw
       - ${MUSIC_DIR:-./music}:/output
+      - /media:/media:rw
     environment:
       - ACOUSTID_API_KEY=${ACOUSTID_API_KEY:-}
       - ACOUSTID_USER_KEY=${ACOUSTID_USER_KEY:-}
