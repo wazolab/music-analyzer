@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from mutagen.flac import FLAC
-from mutagen.id3 import TBPM, TCON, TDRC, TKEY, TXXX
+from mutagen.id3 import TALB, TBPM, TCON, TDRC, TIT2, TKEY, TPE1, TPUB, TXXX
 from mutagen.mp3 import MP3
 
 # Version marker to identify files processed by this analyzer
@@ -22,6 +22,8 @@ class TagData:
     genres: Optional[List[str]] = None
     artist: Optional[str] = None
     title: Optional[str] = None
+    album: Optional[str] = None
+    label: Optional[str] = None
     year: Optional[int] = None
     fingerprint: Optional[str] = None  # Chromaprint/AcoustID fingerprint
     fingerprint_duration: Optional[int] = None  # Duration used for fingerprint (seconds)
@@ -73,6 +75,25 @@ class AudioTagger:
         """Write tags to FLAC file using Vorbis comments."""
         audio = FLAC(file_path)
 
+        # Metadata tags
+        if data.artist is not None:
+            audio["ARTIST"] = data.artist
+
+        if data.title is not None:
+            audio["TITLE"] = data.title
+
+        if data.album is not None:
+            audio["ALBUM"] = data.album
+
+        if data.label is not None:
+            audio["LABEL"] = data.label
+            audio["PUBLISHER"] = data.label  # Alternative tag for compatibility
+
+        if data.year is not None:
+            audio["DATE"] = str(data.year)
+            audio["YEAR"] = str(data.year)
+
+        # Analysis tags
         if data.bpm is not None:
             audio["BPM"] = str(data.bpm)
 
@@ -87,10 +108,6 @@ class AudioTagger:
 
         if data.genres:
             audio["GENRE"] = self._format_genres(data.genres)
-
-        if data.year is not None:
-            audio["DATE"] = str(data.year)
-            audio["YEAR"] = str(data.year)
 
         if data.fingerprint is not None:
             audio["ACOUSTID_FINGERPRINT"] = data.fingerprint
@@ -115,6 +132,23 @@ class AudioTagger:
 
         tags = audio.tags
 
+        # Metadata tags
+        if data.artist is not None:
+            tags.add(TPE1(encoding=3, text=[data.artist]))
+
+        if data.title is not None:
+            tags.add(TIT2(encoding=3, text=[data.title]))
+
+        if data.album is not None:
+            tags.add(TALB(encoding=3, text=[data.album]))
+
+        if data.label is not None:
+            tags.add(TPUB(encoding=3, text=[data.label]))
+
+        if data.year is not None:
+            tags.add(TDRC(encoding=3, text=[str(data.year)]))
+
+        # Analysis tags
         if data.bpm is not None:
             tags.add(TBPM(encoding=3, text=[str(data.bpm)]))
 
@@ -127,9 +161,6 @@ class AudioTagger:
 
         if data.genres:
             tags.add(TCON(encoding=3, text=[self._format_genres(data.genres)]))
-
-        if data.year is not None:
-            tags.add(TDRC(encoding=3, text=[str(data.year)]))
 
         # Always write analyzer version marker
         tags.add(TXXX(encoding=3, desc="ANALYZER", text=[ANALYZER_VERSION]))
@@ -181,6 +212,9 @@ class AudioTagger:
                 genres=audio.get("GENRE", []),
                 artist=audio.get("ARTIST", [None])[0],
                 title=audio.get("TITLE", [None])[0],
+                album=audio.get("ALBUM", [None])[0],
+                label=audio.get("LABEL", [None])[0] or audio.get("PUBLISHER", [None])[0],
+                year=int(audio.get("DATE", [None])[0][:4]) if audio.get("DATE") else None,
                 fingerprint=audio.get("ACOUSTID_FINGERPRINT", [None])[0],
                 fingerprint_duration=(
                     int(audio.get("ACOUSTID_FINGERPRINT_DURATION", [None])[0])

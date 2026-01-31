@@ -16,6 +16,7 @@
             <th class="px-4 py-3 text-left font-medium">Key</th>
             <th class="px-4 py-3 text-left font-medium">Energy</th>
             <th class="px-4 py-3 text-left font-medium">Storage</th>
+            <th class="px-4 py-3 text-right font-medium">Actions</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-default">
@@ -49,10 +50,19 @@
               <UBadge v-if="row.energy" color="info" variant="subtle">E{{ row.energy }}</UBadge>
             </td>
             <td class="px-4 py-3">
-              <UBadge v-if="row.storage_device" :color="row.storage_status === 'offline' ? 'error' : 'success'" variant="subtle" size="xs">
+              <UBadge v-if="row.storage_device" :color="row.storage_status === 'offline' ? 'error' : 'success'" variant="subtle">
                 {{ row.storage_status }}
               </UBadge>
               <span v-else class="text-muted">-</span>
+            </td>
+            <td class="px-4 py-3 text-right">
+              <UButton
+                icon="i-lucide-pencil"
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                @click.stop="$emit('edit', row)"
+              />
             </td>
           </tr>
         </tbody>
@@ -77,5 +87,5 @@ defineProps({
   },
 })
 
-defineEmits(['toggle-select', 'update:selectAll'])
+defineEmits(['toggle-select', 'update:selectAll', 'edit'])
 </script>

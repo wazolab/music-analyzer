@@ -207,6 +207,7 @@
             :select-all="selectAllLibrary"
             @toggle-select="toggleTrackSelect"
             @update:select-all="toggleSelectAllLibrary"
+            @edit="openEditModal"
           />
         </div>
 
@@ -240,6 +241,7 @@
         :select-all="selectAllLibrary"
         @toggle-select="toggleTrackSelect"
         @update:select-all="toggleSelectAllLibrary"
+        @edit="openEditModal"
       />
     </template>
 
@@ -286,21 +288,27 @@
               <UInput v-model="scanPath" placeholder="/media/music" />
             </UFormField>
 
-            <UFormField label="Storage Device Name" hint="Used to track device">
+            <UFormField label="Storage Device Name" description="Used to track which device files are stored on">
               <UInput v-model="scanDevice" placeholder="e.g., SSD-Music" />
             </UFormField>
 
             <UCheckbox v-model="scanRecursive" label="Scan subdirectories" />
 
-            <UAlert v-if="scanResult" :color="scanResult.errors?.length > 0 ? 'warning' : 'success'" variant="soft">
-              Found {{ scanResult.found }} files, {{ scanResult.matched }} matched, {{ scanResult.new }} new
+            <UAlert v-if="scanResult" :color="scanResult.errors?.length > 0 ? 'warning' : 'success'" variant="soft" :title="scanResult.errors?.length > 0 ? 'Scan completed with warnings' : 'Scan completed successfully'">
+              <template #description>
+                Found {{ scanResult.found }} files<span v-if="scanResult.converted">, {{ scanResult.converted }} converted to FLAC</span>, {{ scanResult.matched }} matched, {{ scanResult.new }} new
+              </template>
             </UAlert>
           </div>
 
           <template #footer>
             <div class="flex justify-end gap-2">
-              <UButton color="neutral" variant="ghost" @click="showScanModal = false">Close</UButton>
-              <UButton :disabled="!scanPath || !scanDevice" :loading="scanning" @click="startScan">Start Scan</UButton>
+              <UButton v-if="scanResult" color="neutral" variant="ghost" @click="scanResult = null">Scan Again</UButton>
+              <UButton v-if="scanResult" @click="showScanModal = false">Done</UButton>
+              <template v-else>
+                <UButton color="neutral" variant="ghost" @click="showScanModal = false">Close</UButton>
+                <UButton :disabled="!scanPath || !scanDevice" :loading="scanning" @click="startScan">Start Scan</UButton>
+              </template>
             </div>
           </template>
         </UCard>
@@ -309,6 +317,7 @@
 
     <AnalysisProgress v-if="currentJob" :job-id="currentJob.id" @close="handleJobClose" />
     <PublishModal v-if="showPublishModal" :track-ids="Array.from(selectedTracks)" :volumes="volumes" @close="showPublishModal = false" @published="handlePublished" />
+    <TrackEditModal v-if="showEditModal && editingTrack" :track="editingTrack" @close="closeEditModal" @saved="handleTrackSaved" />
 
     <!-- MusicBrainz Modal -->
     <UModal v-model:open="showMusicBrainzModal" title="Link to MusicBrainz" description="Link track to MusicBrainz recording">
@@ -433,6 +442,9 @@ const musicBrainzSubmitFingerprint = ref(true)
 const linkingTrack = ref(null)
 const linkingInProgress = ref(false)
 const linkingResult = ref(null)
+
+const showEditModal = ref(false)
+const editingTrack = ref(null)
 
 const musicBrainzSearchUrl = computed(() => {
   if (!linkingTrack.value) return 'https://musicbrainz.org/search?type=recording'
@@ -683,4 +695,21 @@ const singleSelectedTrack = computed(() => {
   if (selectedTracks.value.size !== 1) return null
   return tracks.value.find(t => t.id === Array.from(selectedTracks.value)[0])
 })
+
+function openEditModal(track) {
+  editingTrack.value = track
+  showEditModal.value = true
+}
+
+function closeEditModal() {
+  showEditModal.value = false
+  editingTrack.value = null
+}
+
+async function handleTrackSaved() {
+  closeEditModal()
+  selectedTracks.value = new Set()
+  selectAllLibrary.value = false
+  await refreshNuxtData('library-data')
+}
 </script>

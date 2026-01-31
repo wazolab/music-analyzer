@@ -429,6 +429,64 @@ def submit_fingerprint():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/tags/write", methods=["POST"])
+def write_tags():
+    """
+    Write metadata tags to an audio file without re-analyzing.
+
+    Request body:
+        {
+            "file_path": "/path/to/file.flac",
+            "artist": "Artist Name",
+            "title": "Track Title",
+            "album": "Album Name",
+            "label": "Label Name",
+            "year": 2024,
+            "bpm": 128,
+            "key": "8A",
+            "energy": 7,
+            "genres": ["Techno", "House"]
+        }
+
+    Returns:
+        Success status
+    """
+    global analyzer
+
+    if not analyzer:
+        return jsonify({"error": "Analyzer not initialized"}), 503
+
+    data = request.get_json()
+    if not data or "file_path" not in data:
+        return jsonify({"error": "file_path is required"}), 400
+
+    file_path = data["file_path"]
+    if not os.path.exists(file_path):
+        return jsonify({"error": f"File not found: {file_path}"}), 404
+
+    try:
+        # Build TagData from request
+        tag_data = TagData(
+            artist=data.get("artist"),
+            title=data.get("title"),
+            album=data.get("album"),
+            label=data.get("label"),
+            year=data.get("year"),
+            bpm=int(data["bpm"]) if data.get("bpm") is not None else None,
+            key=data.get("key"),
+            energy=int(data["energy"]) if data.get("energy") is not None else None,
+            genres=data.get("genres"),
+        )
+
+        success = analyzer.tagger.write(file_path, tag_data)
+
+        return jsonify({"success": success})
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 def main():
     global analyzer
 

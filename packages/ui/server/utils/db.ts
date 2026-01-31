@@ -1002,6 +1002,44 @@ export function updateLibraryTrackAnalysisResults(
   return result.changes > 0
 }
 
+// Update library track metadata by ID (for manual editing)
+export function updateLibraryTrackMetadata(
+  id: number,
+  data: {
+    artist?: string | null
+    title?: string | null
+    album?: string | null
+    label?: string | null
+    year?: number | null
+    bpm?: number | null
+    key_notation?: string | null
+    energy?: number | null
+    genres?: string[]
+  },
+): LibraryTrack | undefined {
+  const updates: string[] = []
+  const values: any[] = []
+
+  if (data.artist !== undefined) { updates.push('artist = ?'); values.push(data.artist) }
+  if (data.title !== undefined) { updates.push('title = ?'); values.push(data.title) }
+  if (data.album !== undefined) { updates.push('album = ?'); values.push(data.album) }
+  if (data.label !== undefined) { updates.push('label = ?'); values.push(data.label) }
+  if (data.year !== undefined) { updates.push('year = ?'); values.push(data.year) }
+  if (data.bpm !== undefined) { updates.push('bpm = ?'); values.push(data.bpm) }
+  if (data.key_notation !== undefined) { updates.push('key_notation = ?'); values.push(data.key_notation) }
+  if (data.energy !== undefined) { updates.push('energy = ?'); values.push(data.energy) }
+  if (data.genres !== undefined) { updates.push('genres = ?'); values.push(JSON.stringify(data.genres)) }
+
+  if (updates.length === 0) return getLibraryTrackById(id)
+
+  values.push(id)
+
+  const result = db.prepare(`UPDATE library_tracks SET ${updates.join(', ')} WHERE id = ?`).run(...values)
+  if (result.changes === 0) return undefined
+
+  return getLibraryTrackById(id)
+}
+
 // Get library tracks by IDs (for analysis and publish operations)
 export function getLibraryTracksByIds(ids: number[]): LibraryTrack[] {
   if (ids.length === 0) return []
