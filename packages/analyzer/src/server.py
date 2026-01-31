@@ -429,6 +429,61 @@ def submit_fingerprint():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/tags/read", methods=["POST"])
+def read_tags():
+    """
+    Read metadata tags from an audio file.
+
+    Request body:
+        {
+            "file_path": "/path/to/file.flac"
+        }
+
+    Returns:
+        Tag data from the file
+    """
+    global analyzer
+
+    if not analyzer:
+        return jsonify({"error": "Analyzer not initialized"}), 503
+
+    data = request.get_json()
+    if not data or "file_path" not in data:
+        return jsonify({"error": "file_path is required"}), 400
+
+    file_path = data["file_path"]
+    if not os.path.exists(file_path):
+        return jsonify({"error": f"File not found: {file_path}"}), 404
+
+    try:
+        tag_data = analyzer.tagger.read_existing(file_path)
+
+        # Convert TagData to dict, handling genres properly
+        genres = tag_data.genres
+        if isinstance(genres, str):
+            # Split "Genre1 / Genre2" format back to list
+            genres = [g.strip() for g in genres.split('/')]
+        elif genres is None:
+            genres = []
+
+        return jsonify({
+            "artist": tag_data.artist,
+            "title": tag_data.title,
+            "album": tag_data.album,
+            "label": tag_data.label,
+            "year": tag_data.year,
+            "bpm": tag_data.bpm,
+            "key": tag_data.key,
+            "energy": tag_data.energy,
+            "genres": genres,
+            "fingerprint": tag_data.fingerprint,
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/tags/write", methods=["POST"])
 def write_tags():
     """

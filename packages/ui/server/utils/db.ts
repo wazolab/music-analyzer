@@ -1104,4 +1104,15 @@ export function updateLibraryTrackPublished(
   `).run(newPath, storageDevice, id)
 }
 
+/**
+ * Get all library tracks on a specific storage device
+ */
+export function getLibraryTracksByStorageDevice(storageDevice: string): LibraryTrack[] {
+  return db.prepare(`
+    SELECT * FROM library_tracks
+    WHERE storage_device = ? AND storage_status = 'available'
+    ORDER BY artist, title
+  `).all(storageDevice) as LibraryTrack[]
+}
+
 export default db

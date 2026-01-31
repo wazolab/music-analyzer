@@ -1,15 +1,15 @@
-import { copyFile, mkdir, unlink, writeFile, readFile } from 'fs/promises'
+import { copyFile, mkdir, rename, unlink, writeFile, rm } from 'fs/promises'
 import { join, basename } from 'path'
 import { existsSync } from 'fs'
-import { standardizeFilename, simplifyGenre, sanitizePath } from './filename'
-import { updateLibraryTrackPublished } from './db'
+import { standardizeFilename, sanitizePath } from './filename'
+import { updateLibraryTrackPublished, getLibraryTracksByStorageDevice } from './db'
 import type { LibraryTrack } from './types'
 
 export interface PublishOptions {
   tracks: LibraryTrack[]
   destinationRoot: string
   storageDevice: string
-  deleteSource: boolean
+  deleteSource: boolean // Only deletes LOCAL source after copy, NEVER drive files
 }
 
 export interface PublishResult {
@@ -28,35 +28,69 @@ interface PlaylistEntries {
 }
 
 /**
- * Read existing M3U playlist and return its entries
+ * Extract genre name from "Parent---Child" format
+ * Returns the child part (same as library view behavior)
  */
-async function readM3UPlaylist(path: string): Promise<Set<string>> {
-  const entries = new Set<string>()
-  try {
-    const content = await readFile(path, 'utf-8')
-    for (const line of content.split('\n')) {
-      const trimmed = line.trim()
-      if (trimmed && !trimmed.startsWith('#')) {
-        entries.add(trimmed)
-      }
-    }
+function extractGenreName(genre: string): string {
+  if (genre.includes('---')) {
+    return genre.split('---')[1] || genre
   }
-  catch {
-    // File doesn't exist yet
-  }
-  return entries
+  return genre
 }
 
 /**
- * Write M3U playlist file, merging with existing entries
+ * Get the primary genre from a track's genres JSON string
+ * Matches library view behavior
+ */
+function getTopGenre(genresJson: string | null): string | null {
+  if (!genresJson) return null
+  try {
+    const genres = JSON.parse(genresJson) as string[]
+    if (genres.length === 0) return null
+    return extractGenreName(genres[0])
+  }
+  catch {
+    return null
+  }
+}
+
+/**
+ * Write tags to a file via the analyzer API
+ */
+async function writeTagsToFile(filePath: string, track: LibraryTrack): Promise<boolean> {
+  const analyzerUrl = process.env.ANALYZER_URL
+  if (!analyzerUrl) return false
+
+  try {
+    const response = await fetch(`${analyzerUrl}/tags/write`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        file_path: filePath,
+        artist: track.artist,
+        title: track.title,
+        album: track.album,
+        label: track.label,
+        year: track.year,
+        bpm: track.bpm,
+        key: track.key_notation,
+        energy: track.energy,
+        genres: track.genres ? JSON.parse(track.genres) : undefined,
+      }),
+    })
+
+    return response.ok
+  }
+  catch {
+    return false
+  }
+}
+
+/**
+ * Write M3U playlist file (complete replacement, not merge)
  */
 async function writeM3UPlaylist(path: string, entries: string[]): Promise<void> {
-  const existing = await readM3UPlaylist(path)
-  for (const entry of entries) {
-    existing.add(entry)
-  }
-
-  const sorted = Array.from(existing).sort()
+  const sorted = Array.from(new Set(entries)).sort()
   const content = '#EXTM3U\n' + sorted.join('\n') + '\n'
   await writeFile(path, content, 'utf-8')
 }
@@ -72,21 +106,13 @@ function collectPlaylistEntries(
   const relativePath = `../${filename}`
 
   // by-genre (primary genre only, matching library view behavior)
-  if (track.genres) {
-    try {
-      const genres = JSON.parse(track.genres) as string[]
-      if (genres.length > 0) {
-        const simplifiedGenre = simplifyGenre(genres[0])
-        const key = sanitizePath(simplifiedGenre)
-        if (!playlists.byGenre.has(key)) {
-          playlists.byGenre.set(key, [])
-        }
-        playlists.byGenre.get(key)!.push(relativePath)
-      }
+  const topGenre = getTopGenre(track.genres)
+  if (topGenre) {
+    const key = sanitizePath(topGenre)
+    if (!playlists.byGenre.has(key)) {
+      playlists.byGenre.set(key, [])
     }
-    catch {
-      // Invalid genres JSON, skip
-    }
+    playlists.byGenre.get(key)!.push(relativePath)
   }
 
   // by-label
@@ -109,29 +135,55 @@ function collectPlaylistEntries(
 }
 
 /**
- * Write all collected playlists to disk
+ * Clear and rebuild all playlists from scratch
  */
-async function writeAllPlaylists(
+async function rebuildAllPlaylists(
   root: string,
   playlists: PlaylistEntries,
 ): Promise<void> {
+  // Clear existing playlist directories
+  const genreDir = join(root, 'by-genre')
+  const labelDir = join(root, 'by-label')
+  const yearDir = join(root, 'by-year')
+
+  // Remove and recreate directories to clear old playlists
+  try {
+    if (existsSync(genreDir)) await rm(genreDir, { recursive: true })
+    if (existsSync(labelDir)) await rm(labelDir, { recursive: true })
+    if (existsSync(yearDir)) await rm(yearDir, { recursive: true })
+  }
+  catch (err) {
+    console.error('[Publish] Error clearing playlist directories:', err)
+  }
+
+  await mkdir(genreDir, { recursive: true })
+  await mkdir(labelDir, { recursive: true })
+  await mkdir(yearDir, { recursive: true })
+
   // Write genre playlists
   for (const [genre, entries] of playlists.byGenre) {
-    const playlistPath = join(root, 'by-genre', `${genre}.m3u`)
+    const playlistPath = join(genreDir, `${genre}.m3u`)
     await writeM3UPlaylist(playlistPath, entries)
   }
 
   // Write label playlists
   for (const [label, entries] of playlists.byLabel) {
-    const playlistPath = join(root, 'by-label', `${label}.m3u`)
+    const playlistPath = join(labelDir, `${label}.m3u`)
     await writeM3UPlaylist(playlistPath, entries)
   }
 
   // Write year playlists
   for (const [year, entries] of playlists.byYear) {
-    const playlistPath = join(root, 'by-year', `${year}.m3u`)
+    const playlistPath = join(yearDir, `${year}.m3u`)
     await writeM3UPlaylist(playlistPath, entries)
   }
+}
+
+/**
+ * Check if a path is on the drive (starts with destination root)
+ */
+function isOnDrive(filePath: string, destinationRoot: string): boolean {
+  return filePath.startsWith(destinationRoot)
 }
 
 /**
@@ -143,7 +195,10 @@ async function writeAllPlaylists(
  *   /destinationRoot/by-label/Drumcode.m3u
  *   /destinationRoot/by-year/2024.m3u
  *
- * This approach works on all filesystems including exFAT which doesn't support symlinks.
+ * IMPORTANT: Files are NEVER deleted from the drive. Only local source files
+ * can be deleted after successful copy (when deleteSource is true).
+ *
+ * Playlists are rebuilt from ALL tracks on the drive to match DB exactly.
  */
 export async function publishTracks(options: PublishOptions): Promise<PublishResult> {
   const { tracks, destinationRoot, storageDevice, deleteSource } = options
@@ -154,19 +209,8 @@ export async function publishTracks(options: PublishOptions): Promise<PublishRes
     published: [],
   }
 
-  const playlists: PlaylistEntries = {
-    byGenre: new Map(),
-    byLabel: new Map(),
-    byYear: new Map(),
-  }
-
   // Ensure root directory exists
   await mkdir(destinationRoot, { recursive: true })
-
-  // Create organization directories
-  await mkdir(join(destinationRoot, 'by-genre'), { recursive: true })
-  await mkdir(join(destinationRoot, 'by-label'), { recursive: true })
-  await mkdir(join(destinationRoot, 'by-year'), { recursive: true })
 
   for (const track of tracks) {
     try {
@@ -182,68 +226,86 @@ export async function publishTracks(options: PublishOptions): Promise<PublishRes
         continue
       }
 
-      // Generate standardized filename
+      // Generate standardized filename from current DB metadata
       const artist = track.artist || 'Unknown Artist'
       const title = track.title || basename(track.file_path, '.flac')
       const filename = standardizeFilename(artist, title)
       const destPath = join(destinationRoot, filename)
 
-      // Check if destination already exists
-      if (existsSync(destPath) && destPath !== track.file_path) {
-        // File already exists at destination - handle collision
-        let counter = 1
-        let finalPath = destPath
-        while (existsSync(finalPath) && finalPath !== track.file_path) {
-          const nameWithoutExt = `${artist} - ${title} (${counter})`
-          finalPath = join(destinationRoot, `${sanitizePath(nameWithoutExt)}.flac`)
-          counter++
+      // Check if track is already on the drive
+      const alreadyOnDrive = isOnDrive(track.file_path, destinationRoot)
+
+      if (alreadyOnDrive) {
+        // Track is already on drive - handle rename/update
+        if (track.file_path === destPath) {
+          // Same path - just update tags
+          await writeTagsToFile(destPath, track)
+          updateLibraryTrackPublished(track.id, destPath, storageDevice)
+
+          console.log(`[Publish] Updated tags: ${artist} - ${title}`)
         }
+        else {
+          // Metadata changed - need to rename file on drive
+          let finalPath = destPath
 
-        // Copy file
-        await copyFile(track.file_path, finalPath)
+          // Handle collision if new name already exists
+          if (existsSync(destPath)) {
+            let counter = 1
+            while (existsSync(finalPath)) {
+              const nameWithoutExt = `${artist} - ${title} (${counter})`
+              finalPath = join(destinationRoot, `${sanitizePath(nameWithoutExt)}.flac`)
+              counter++
+            }
+          }
 
-        // Collect playlist entries
-        collectPlaylistEntries(playlists, basename(finalPath), track)
+          // Rename file on drive (NOT delete!)
+          await rename(track.file_path, finalPath)
 
-        // Update database
-        updateLibraryTrackPublished(track.id, finalPath, storageDevice)
+          // Update tags on renamed file
+          await writeTagsToFile(finalPath, track)
 
-        // Delete source if requested
-        if (deleteSource && track.file_path !== finalPath) {
-          await unlink(track.file_path)
+          // Update database
+          updateLibraryTrackPublished(track.id, finalPath, storageDevice)
+
+          console.log(`[Publish] Renamed: ${basename(track.file_path)} -> ${basename(finalPath)}`)
         }
-
-        result.success++
-        result.published.push({ id: track.id, newPath: finalPath })
-      }
-      else if (destPath === track.file_path) {
-        // Already at destination - just update playlists and DB
-        collectPlaylistEntries(playlists, filename, track)
-        updateLibraryTrackPublished(track.id, destPath, storageDevice)
 
         result.success++
         result.published.push({ id: track.id, newPath: destPath })
       }
       else {
-        // Copy file to destination
-        await copyFile(track.file_path, destPath)
+        // Track is NOT on drive yet - copy from local source
+        let finalPath = destPath
 
-        // Collect playlist entries
-        collectPlaylistEntries(playlists, filename, track)
+        // Handle collision if destination already exists
+        if (existsSync(destPath)) {
+          let counter = 1
+          while (existsSync(finalPath)) {
+            const nameWithoutExt = `${artist} - ${title} (${counter})`
+            finalPath = join(destinationRoot, `${sanitizePath(nameWithoutExt)}.flac`)
+            counter++
+          }
+        }
+
+        // Copy file to drive
+        await copyFile(track.file_path, finalPath)
+
+        // Update tags on the copied file to ensure they match DB
+        await writeTagsToFile(finalPath, track)
 
         // Update database
-        updateLibraryTrackPublished(track.id, destPath, storageDevice)
+        updateLibraryTrackPublished(track.id, finalPath, storageDevice)
 
-        // Delete source if requested
+        // Delete LOCAL source if requested (never delete from drive)
         if (deleteSource) {
           await unlink(track.file_path)
         }
 
-        result.success++
-        result.published.push({ id: track.id, newPath: destPath })
-      }
+        console.log(`[Publish] Copied: ${artist} - ${title} -> ${finalPath}`)
 
-      console.log(`[Publish] Published: ${artist} - ${title} -> ${destPath}`)
+        result.success++
+        result.published.push({ id: track.id, newPath: finalPath })
+      }
     }
     catch (err: any) {
       const errorMsg = `Track ${track.id} (${track.artist} - ${track.title}): ${err.message}`
@@ -252,15 +314,30 @@ export async function publishTracks(options: PublishOptions): Promise<PublishRes
     }
   }
 
-  // Write all M3U playlists
-  if (result.success > 0) {
-    try {
-      await writeAllPlaylists(destinationRoot, playlists)
-      console.log(`[Publish] Updated M3U playlists in by-genre/, by-label/, by-year/`)
+  // Rebuild ALL playlists from ALL tracks on the drive (not just published ones)
+  // This ensures playlists match DB exactly
+  try {
+    const allTracksOnDrive = getLibraryTracksByStorageDevice(storageDevice)
+
+    const playlists: PlaylistEntries = {
+      byGenre: new Map(),
+      byLabel: new Map(),
+      byYear: new Map(),
     }
-    catch (err: any) {
-      console.error(`[Publish] Error writing playlists: ${err.message}`)
+
+    // Collect playlist entries from ALL tracks on the drive
+    for (const track of allTracksOnDrive) {
+      if (track.file_path) {
+        collectPlaylistEntries(playlists, basename(track.file_path), track)
+      }
     }
+
+    // Rebuild playlists completely
+    await rebuildAllPlaylists(destinationRoot, playlists)
+    console.log(`[Publish] Rebuilt playlists from ${allTracksOnDrive.length} tracks: ${playlists.byGenre.size} genres, ${playlists.byLabel.size} labels, ${playlists.byYear.size} years`)
+  }
+  catch (err: any) {
+    console.error(`[Publish] Error rebuilding playlists: ${err.message}`)
   }
 
   return result

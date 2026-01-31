@@ -1,5 +1,32 @@
+import { access, mkdir, constants } from 'fs/promises'
+import { dirname } from 'path'
 import { getLibraryTracksByIds, setLibrarySetting } from '../../utils/db'
 import { publishTracks } from '../../utils/publish'
+
+/**
+ * Check if we have write access to a directory (or its parent)
+ */
+async function checkWriteAccess(path: string): Promise<{ canWrite: boolean, error?: string }> {
+  try {
+    // Try to access the directory
+    await access(path, constants.W_OK)
+    return { canWrite: true }
+  }
+  catch {
+    // Directory doesn't exist, check parent
+    const parent = dirname(path)
+    try {
+      await access(parent, constants.W_OK)
+      return { canWrite: true }
+    }
+    catch {
+      return {
+        canWrite: false,
+        error: `No write permission to "${path}". For exFAT/FAT32 drives, remount with: sudo mount -o uid=$(id -u),gid=$(id -g),umask=0022 <device> "${parent}"`,
+      }
+    }
+  }
+}
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
@@ -28,6 +55,15 @@ export default defineEventHandler(async (event) => {
     throw createError({
       statusCode: 400,
       message: 'storageDevice is required (e.g., "Music-SSD")',
+    })
+  }
+
+  // Check write permissions before proceeding
+  const permCheck = await checkWriteAccess(destinationRoot)
+  if (!permCheck.canWrite) {
+    throw createError({
+      statusCode: 403,
+      message: permCheck.error || 'No write permission to destination',
     })
   }
 
