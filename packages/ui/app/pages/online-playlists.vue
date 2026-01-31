@@ -39,20 +39,17 @@
 
     <!-- Playlists Section -->
     <section>
-      <div class="flex items-center gap-2 mb-5">
-        <h2 class="text-lg text-muted">My Playlists</h2>
-        <UBadge color="neutral" variant="subtle">{{ playlists.length }}</UBadge>
-      </div>
+      <UTabs v-model="activeTab" :items="tabs" class="mb-5" />
 
       <div v-if="pending" class="text-muted text-center py-10">
         Loading playlists...
       </div>
-      <div v-else-if="playlists.length === 0" class="text-muted text-center py-10">
-        No playlists yet. Import one above!
+      <div v-else-if="filteredPlaylists.length === 0" class="text-muted text-center py-10">
+        No {{ activeTab === 'youtube' ? 'YouTube' : 'SoundCloud' }} playlists yet. Import one above!
       </div>
       <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         <PlaylistCard
-          v-for="playlist in playlists"
+          v-for="playlist in filteredPlaylists"
           :key="playlist.id"
           :playlist="playlist"
           @delete="handleDelete"
@@ -71,8 +68,33 @@ const playlistName = ref('')
 const extracting = ref(false)
 const error = ref('')
 
+const route = useRoute()
+const router = useRouter()
+
 const { data: playlists, pending, refresh } = await useFetch('/api/playlists', {
   default: () => [],
+})
+
+const activeTab = computed({
+  get: () => route.query.source === 'youtube' ? 'youtube' : 'soundcloud',
+  set: (value) => {
+    router.replace({ query: { ...route.query, source: value } })
+  },
+})
+
+const soundcloudCount = computed(() => playlists.value.filter(p => p.url?.includes('soundcloud.com')).length)
+const youtubeCount = computed(() => playlists.value.filter(p => p.url?.includes('youtube.com') || p.url?.includes('youtu.be')).length)
+
+const tabs = computed(() => [
+  { label: `SoundCloud (${soundcloudCount.value})`, value: 'soundcloud' },
+  { label: `YouTube (${youtubeCount.value})`, value: 'youtube' },
+])
+
+const filteredPlaylists = computed(() => {
+  if (activeTab.value === 'youtube') {
+    return playlists.value.filter(p => p.url?.includes('youtube.com') || p.url?.includes('youtu.be'))
+  }
+  return playlists.value.filter(p => p.url?.includes('soundcloud.com'))
 })
 
 async function extractPlaylist() {
