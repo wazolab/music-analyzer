@@ -252,21 +252,25 @@ node dist/index.js status
 
 ### Folder Structure
 
+When publishing to external drives, files are stored flat at the root with M3U playlists for organization. This approach works on all filesystems including exFAT (which doesn't support symlinks):
+
 ```
-output/
-├── by-year/
-│   ├── 2020/
-│   │   └── Artist - Title.flac
-│   ├── 2021/
-│   └── unknown/
+dj-library/
+├── Artist - Title.flac
+├── Artist2 - Title2.flac
 ├── by-genre/
-│   ├── Electronic House/
-│   ├── Electronic Techno/
-│   └── unknown/
-└── by-label/
-    ├── Kompakt/
-    └── unknown/
+│   ├── House.m3u
+│   ├── Techno.m3u
+│   └── Trance.m3u
+├── by-label/
+│   ├── Drumcode.m3u
+│   └── Kompakt.m3u
+└── by-year/
+    ├── 2023.m3u
+    └── 2024.m3u
 ```
+
+The M3U playlists contain relative paths to the FLAC files and can be imported into Rekordbox, Traktor, or any DJ software that supports M3U playlists.
 
 ## How It Works
 

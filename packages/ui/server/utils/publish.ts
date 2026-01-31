@@ -1,4 +1,4 @@
-import { copyFile, mkdir, symlink, unlink, stat, lstat } from 'fs/promises'
+import { copyFile, mkdir, unlink, writeFile, readFile } from 'fs/promises'
 import { join, basename } from 'path'
 import { existsSync } from 'fs'
 import { standardizeFilename, simplifyGenre, sanitizePath } from './filename'
@@ -21,35 +21,55 @@ export interface PublishResult {
   }>
 }
 
-/**
- * Create a symlink, handling the case where it already exists
- */
-async function safeSymlink(target: string, path: string): Promise<void> {
-  try {
-    // Check if symlink already exists
-    const stats = await lstat(path).catch(() => null)
-    if (stats) {
-      // Already exists - skip
-      return
-    }
-    await symlink(target, path)
-  }
-  catch (err: any) {
-    if (err.code !== 'EEXIST') {
-      throw err
-    }
-  }
+interface PlaylistEntries {
+  byGenre: Map<string, string[]>
+  byLabel: Map<string, string[]>
+  byYear: Map<string, string[]>
 }
 
 /**
- * Create organization symlinks for a track
+ * Read existing M3U playlist and return its entries
  */
-async function createOrganizationSymlinks(
-  root: string,
+async function readM3UPlaylist(path: string): Promise<Set<string>> {
+  const entries = new Set<string>()
+  try {
+    const content = await readFile(path, 'utf-8')
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim()
+      if (trimmed && !trimmed.startsWith('#')) {
+        entries.add(trimmed)
+      }
+    }
+  }
+  catch {
+    // File doesn't exist yet
+  }
+  return entries
+}
+
+/**
+ * Write M3U playlist file, merging with existing entries
+ */
+async function writeM3UPlaylist(path: string, entries: string[]): Promise<void> {
+  const existing = await readM3UPlaylist(path)
+  for (const entry of entries) {
+    existing.add(entry)
+  }
+
+  const sorted = Array.from(existing).sort()
+  const content = '#EXTM3U\n' + sorted.join('\n') + '\n'
+  await writeFile(path, content, 'utf-8')
+}
+
+/**
+ * Collect playlist entries for a track
+ */
+function collectPlaylistEntries(
+  playlists: PlaylistEntries,
   filename: string,
   track: LibraryTrack,
-): Promise<void> {
-  const relativeTarget = `../../${filename}`
+): void {
+  const relativePath = `../${filename}`
 
   // by-genre (max 3 genres)
   if (track.genres) {
@@ -57,9 +77,11 @@ async function createOrganizationSymlinks(
       const genres = JSON.parse(track.genres) as string[]
       for (const genre of genres.slice(0, 3)) {
         const simplifiedGenre = simplifyGenre(genre)
-        const genreDir = join(root, 'by-genre', sanitizePath(simplifiedGenre))
-        await mkdir(genreDir, { recursive: true })
-        await safeSymlink(relativeTarget, join(genreDir, filename))
+        const key = sanitizePath(simplifiedGenre)
+        if (!playlists.byGenre.has(key)) {
+          playlists.byGenre.set(key, [])
+        }
+        playlists.byGenre.get(key)!.push(relativePath)
       }
     }
     catch {
@@ -69,16 +91,46 @@ async function createOrganizationSymlinks(
 
   // by-label
   if (track.label) {
-    const labelDir = join(root, 'by-label', sanitizePath(track.label))
-    await mkdir(labelDir, { recursive: true })
-    await safeSymlink(relativeTarget, join(labelDir, filename))
+    const key = sanitizePath(track.label)
+    if (!playlists.byLabel.has(key)) {
+      playlists.byLabel.set(key, [])
+    }
+    playlists.byLabel.get(key)!.push(relativePath)
   }
 
   // by-year
   if (track.year) {
-    const yearDir = join(root, 'by-year', String(track.year))
-    await mkdir(yearDir, { recursive: true })
-    await safeSymlink(relativeTarget, join(yearDir, filename))
+    const key = String(track.year)
+    if (!playlists.byYear.has(key)) {
+      playlists.byYear.set(key, [])
+    }
+    playlists.byYear.get(key)!.push(relativePath)
+  }
+}
+
+/**
+ * Write all collected playlists to disk
+ */
+async function writeAllPlaylists(
+  root: string,
+  playlists: PlaylistEntries,
+): Promise<void> {
+  // Write genre playlists
+  for (const [genre, entries] of playlists.byGenre) {
+    const playlistPath = join(root, 'by-genre', `${genre}.m3u`)
+    await writeM3UPlaylist(playlistPath, entries)
+  }
+
+  // Write label playlists
+  for (const [label, entries] of playlists.byLabel) {
+    const playlistPath = join(root, 'by-label', `${label}.m3u`)
+    await writeM3UPlaylist(playlistPath, entries)
+  }
+
+  // Write year playlists
+  for (const [year, entries] of playlists.byYear) {
+    const playlistPath = join(root, 'by-year', `${year}.m3u`)
+    await writeM3UPlaylist(playlistPath, entries)
   }
 }
 
@@ -86,10 +138,12 @@ async function createOrganizationSymlinks(
  * Publish tracks to an external drive with organized folder structure
  *
  * Files are stored flat at the root: /destinationRoot/Artist - Title.flac
- * Symlinks are created for organization:
- *   /destinationRoot/by-genre/Techno/Artist - Title.flac -> ../../Artist - Title.flac
- *   /destinationRoot/by-label/Drumcode/Artist - Title.flac -> ../../Artist - Title.flac
- *   /destinationRoot/by-year/2024/Artist - Title.flac -> ../../Artist - Title.flac
+ * M3U playlists are created for organization:
+ *   /destinationRoot/by-genre/Techno.m3u
+ *   /destinationRoot/by-label/Drumcode.m3u
+ *   /destinationRoot/by-year/2024.m3u
+ *
+ * This approach works on all filesystems including exFAT which doesn't support symlinks.
  */
 export async function publishTracks(options: PublishOptions): Promise<PublishResult> {
   const { tracks, destinationRoot, storageDevice, deleteSource } = options
@@ -98,6 +152,12 @@ export async function publishTracks(options: PublishOptions): Promise<PublishRes
     success: 0,
     errors: [],
     published: [],
+  }
+
+  const playlists: PlaylistEntries = {
+    byGenre: new Map(),
+    byLabel: new Map(),
+    byYear: new Map(),
   }
 
   // Ensure root directory exists
@@ -142,8 +202,8 @@ export async function publishTracks(options: PublishOptions): Promise<PublishRes
         // Copy file
         await copyFile(track.file_path, finalPath)
 
-        // Create symlinks
-        await createOrganizationSymlinks(destinationRoot, basename(finalPath), track)
+        // Collect playlist entries
+        collectPlaylistEntries(playlists, basename(finalPath), track)
 
         // Update database
         updateLibraryTrackPublished(track.id, finalPath, storageDevice)
@@ -157,8 +217,8 @@ export async function publishTracks(options: PublishOptions): Promise<PublishRes
         result.published.push({ id: track.id, newPath: finalPath })
       }
       else if (destPath === track.file_path) {
-        // Already at destination - just update symlinks and DB
-        await createOrganizationSymlinks(destinationRoot, filename, track)
+        // Already at destination - just update playlists and DB
+        collectPlaylistEntries(playlists, filename, track)
         updateLibraryTrackPublished(track.id, destPath, storageDevice)
 
         result.success++
@@ -168,8 +228,8 @@ export async function publishTracks(options: PublishOptions): Promise<PublishRes
         // Copy file to destination
         await copyFile(track.file_path, destPath)
 
-        // Create symlinks
-        await createOrganizationSymlinks(destinationRoot, filename, track)
+        // Collect playlist entries
+        collectPlaylistEntries(playlists, filename, track)
 
         // Update database
         updateLibraryTrackPublished(track.id, destPath, storageDevice)
@@ -189,6 +249,17 @@ export async function publishTracks(options: PublishOptions): Promise<PublishRes
       const errorMsg = `Track ${track.id} (${track.artist} - ${track.title}): ${err.message}`
       result.errors.push(errorMsg)
       console.error(`[Publish] Error: ${errorMsg}`)
+    }
+  }
+
+  // Write all M3U playlists
+  if (result.success > 0) {
+    try {
+      await writeAllPlaylists(destinationRoot, playlists)
+      console.log(`[Publish] Updated M3U playlists in by-genre/, by-label/, by-year/`)
+    }
+    catch (err: any) {
+      console.error(`[Publish] Error writing playlists: ${err.message}`)
     }
   }
 
