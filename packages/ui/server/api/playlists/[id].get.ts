@@ -1,5 +1,4 @@
-import { getPlaylistById, getTracksByPlaylistId } from '../../utils/db'
-import type { PlaylistWithTracks } from '../../utils/types'
+import { getPlaylistById, getTracksByPlaylistId, checkTrackInLibrary } from '../../utils/db'
 
 export default defineEventHandler((event) => {
   const id = Number(getRouterParam(event, 'id'))
@@ -22,10 +21,16 @@ export default defineEventHandler((event) => {
 
   const tracks = getTracksByPlaylistId(id)
 
-  const result: PlaylistWithTracks = {
-    ...playlist,
-    tracks,
-  }
+  // Add computed library status to each track
+  const tracksWithLibrary = tracks.map((track) => ({
+    ...track,
+    in_library_computed: track.in_library !== null
+      ? !!track.in_library
+      : checkTrackInLibrary(track.artist, track.title),
+  }))
 
-  return result
+  return {
+    ...playlist,
+    tracks: tracksWithLibrary,
+  }
 })

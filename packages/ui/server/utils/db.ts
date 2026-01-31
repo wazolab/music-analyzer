@@ -94,6 +94,14 @@ catch (e) {
   // Column already exists
 }
 
+// Migration: add in_library column to tracks (null = auto-detect, true/false = manual override)
+try {
+  db.exec('ALTER TABLE tracks ADD COLUMN in_library INTEGER')
+}
+catch (e) {
+  // Column already exists
+}
+
 // Migration: Add logs column to analysis_jobs
 try {
   db.exec('ALTER TABLE analysis_jobs ADD COLUMN logs TEXT')
@@ -318,6 +326,47 @@ export function updateTrackStatus(id: number, status: TrackStatus): boolean {
     return true
   }
   return false
+}
+
+export function updateTrackInLibrary(id: number, inLibrary: boolean | null): boolean {
+  const result = db.prepare('UPDATE tracks SET in_library = ? WHERE id = ?').run(
+    inLibrary === null ? null : (inLibrary ? 1 : 0),
+    id,
+  )
+  return result.changes > 0
+}
+
+// Check if a track exists in library by fuzzy artist/title matching
+export function checkTrackInLibrary(artist: string, title: string): boolean {
+  const artistLower = artist.toLowerCase().trim()
+  const titleLower = title.toLowerCase().trim()
+
+  const match = db.prepare(`
+    SELECT 1 FROM library_tracks
+    WHERE analysis_status = 'analyzed' AND (
+      (LOWER(artist) = ? AND LOWER(title) = ?) OR
+      (LOWER(artist) = ? AND LOWER(title) LIKE ?) OR
+      (LOWER(artist) LIKE ? AND LOWER(title) = ?)
+    )
+    LIMIT 1
+  `).get(
+    artistLower, titleLower,
+    artistLower, `${titleLower}%`,
+    `%${artistLower}%`, titleLower,
+  )
+
+  return !!match
+}
+
+// Get library match status for multiple tracks (for batch checking)
+export function getLibraryMatchesForTracks(tracks: { id: number, artist: string, title: string }[]): Map<number, boolean> {
+  const matches = new Map<number, boolean>()
+
+  for (const track of tracks) {
+    matches.set(track.id, checkTrackInLibrary(track.artist, track.title))
+  }
+
+  return matches
 }
 
 // Sync operation - preserves statuses for existing tracks

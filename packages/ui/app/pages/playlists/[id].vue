@@ -96,6 +96,7 @@
               :is-playing="currentTrack?.id === track.id"
               @toggle-prep="handleTogglePrep"
               @toggle-play="handleTogglePlay"
+              @toggle-library="handleToggleLibrary"
             />
           </div>
           <div
@@ -234,6 +235,27 @@ function handleTogglePlay(track) {
   }
   else {
     currentTrack.value = track
+  }
+}
+
+async function handleToggleLibrary(trackId, inLibrary) {
+  try {
+    await $fetch(`/api/tracks/${trackId}/in-library`, {
+      method: 'PATCH',
+      body: { in_library: inLibrary },
+    })
+    // Replace entire playlist object to trigger reactivity
+    playlist.value = {
+      ...playlist.value,
+      tracks: playlist.value.tracks.map(t =>
+        t.id === trackId
+          ? { ...t, in_library: inLibrary, in_library_computed: inLibrary }
+          : t,
+      ),
+    }
+  }
+  catch (e) {
+    error.value = e.data?.message || 'Failed to update library status'
   }
 }
 

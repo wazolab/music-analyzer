@@ -13,6 +13,7 @@ export interface Track {
   key_notation: string | null
   energy: number | null
   analyzed_at: string | null
+  in_library: boolean | null // null = auto-detect, true/false = manual override
 }
 
 export interface PrepTrack {

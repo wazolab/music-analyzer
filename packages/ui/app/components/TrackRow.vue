@@ -32,6 +32,14 @@
         :title="inPrep ? 'Remove from Prep' : 'Add to Prep'"
         @click="togglePrep"
       />
+      <UButton
+        icon="i-lucide-library"
+        size="sm"
+        :color="track.in_library_computed ? 'success' : 'neutral'"
+        :variant="track.in_library_computed ? 'solid' : 'ghost'"
+        :title="track.in_library_computed ? 'In library (click to unmark)' : 'Not in library (click to mark)'"
+        @click="toggleLibrary"
+      />
     </div>
 
     <!-- Track info -->
@@ -96,7 +104,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['toggle-prep', 'toggle-play'])
+const emit = defineEmits(['toggle-prep', 'toggle-play', 'toggle-library'])
 
 const copied = ref(false)
 
@@ -115,5 +123,9 @@ function togglePrep() {
 
 function togglePlay() {
   emit('toggle-play', props.track)
+}
+
+function toggleLibrary() {
+  emit('toggle-library', props.track.id, !props.track.in_library_computed)
 }
 </script>
