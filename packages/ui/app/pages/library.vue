@@ -597,7 +597,17 @@ const groupedTracks = computed(() => {
     if (!groups.has(key)) groups.set(key, [])
     groups.get(key).push(track)
   }
-  return Array.from(groups.entries()).map(([name, tracks]) => ({ name, tracks })).sort((a, b) => viewMode.value === 'year' ? (Number.parseInt(b.name, 10) || 0) - (Number.parseInt(a.name, 10) || 0) : b.tracks.length - a.tracks.length)
+  return Array.from(groups.entries())
+    .map(([name, tracks]) => ({ name, tracks }))
+    .sort((a, b) => {
+      if (viewMode.value === 'year') {
+        return (Number.parseInt(b.name, 10) || 0) - (Number.parseInt(a.name, 10) || 0)
+      }
+      if (viewMode.value === 'genre' || viewMode.value === 'label') {
+        return a.name.localeCompare(b.name)
+      }
+      return b.tracks.length - a.tracks.length
+    })
 })
 
 async function openScanModal() {
