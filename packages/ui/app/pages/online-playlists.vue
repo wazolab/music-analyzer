@@ -56,7 +56,6 @@
           :key="playlist.id"
           :playlist="playlist"
           @delete="handleDelete"
-          @updated="refresh"
         />
       </div>
     </section>
